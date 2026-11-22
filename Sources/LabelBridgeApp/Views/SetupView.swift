@@ -15,31 +15,27 @@ struct SetupView: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.top, 8)
-            .padding(.bottom, 20)
+            .padding(.bottom, 22)
 
-            VStack(alignment: .leading, spacing: 14) {
-                Text(flow.finished ? "Setup finished:" : "Clicking Start Setup will:")
-                    .font(.headline)
-                VStack(alignment: .leading, spacing: 0) {
-                    step(1, "Move LabelBridge to Applications",
-                         "Keeps the printer and the command working.", flow.applications)
-                    step(2, "Ask for Bluetooth access",
-                         "So LabelBridge can talk to your D11.", flow.bluetooth)
-                    step(3, "Add the printer “NIIMBOT D11”",
-                         "So it shows up in every app's Print dialog.", flow.printerQueue)
-                    step(4, "Install the labelbridge command",
-                         "So Terminal, scripts and AI assistants can print.", flow.cli)
-                    step(5, "Open LabelBridge at login",
-                         "Runs in the background so printing just works.", flow.login, last: true)
+            PrinterStatusView()
+            .padding(14)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.separator))
+
+            VStack(alignment: .leading, spacing: 8) {
+                if flow.running || flow.finished {
+                    ProgressView(value: progress).progressViewStyle(.linear)
+                        .tint(problems.isEmpty ? .accentColor : .orange)
                 }
+                Text(progressText)
+                    .font(.callout)
+                    .foregroundStyle(flow.finished && !problems.isEmpty ? .orange : .secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(footer)
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 18)
+            .frame(minHeight: 56, alignment: .top)
+            .padding(.top, 20)
 
             HStack {
                 Spacer()
@@ -47,61 +43,48 @@ struct SetupView: View {
                     Button("Done") { onClose() }.keyboardShortcut(.defaultAction)
                 } else {
                     Button("Not Now") { onClose() }.disabled(flow.running)
-                    Button(flow.running ? "Setting Up…" : "Start Setup") { Task { await flow.runAll() } }
+                    Button("Start Setup") { Task { await flow.runAll() } }
                         .keyboardShortcut(.defaultAction).disabled(flow.running)
                 }
             }
             .controlSize(.large)
-            .padding(.top, 16)
+            .padding(.top, 12)
         }
         .padding(24)
-        .frame(width: 460)
+        .frame(width: 440)
+        .animation(.default, value: progress)
     }
 
-    private var footer: String {
-        flow.finished
-            ? "All set. Turn the D11 on, and keep the NIIMBOT phone app disconnected while printing from the Mac."
-            : "It takes a few seconds. macOS may ask for your password."
+    private var steps: [(text: String, status: StepStatus)] {
+        [("Moving LabelBridge to Applications…", flow.applications),
+         ("Asking for Bluetooth access…", flow.bluetooth),
+         ("Adding the printer to macOS…", flow.printerQueue),
+         ("Installing the labelbridge command…", flow.cli)]
     }
 
-    @ViewBuilder
-    private func step(_ number: Int, _ title: String, _ detail: String, _ status: StepStatus, last: Bool = false) -> some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(spacing: 0) {
-                marker(number, status).frame(width: 24, height: 24)
-                if !last {
-                    Rectangle().fill(.separator).frame(width: 1).frame(maxHeight: .infinity)
-                }
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.body.weight(.medium))
-                Group {
-                    switch status {
-                    case .failed(let message): Text(message).foregroundStyle(.orange)
-                    case .skipped(let message): Text(message).textSelection(.enabled)
-                    default: Text(detail)
-                    }
-                }
-                .font(.callout).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.top, 2)
-            .padding(.bottom, last ? 0 : 14)
+    private var progress: Double {
+        let finished = steps.filter { $0.status != .pending && $0.status != .running }.count
+        return Double(finished) / Double(steps.count)
+    }
+
+    private var problems: [String] {
+        steps.compactMap {
+            if case .failed(let m) = $0.status { return m }
+            if case .skipped(let m) = $0.status, $0.text.contains("command") { return "The labelbridge command wasn't installed. \(m)" }
+            return nil
         }
     }
 
-    @ViewBuilder
-    private func marker(_ number: Int, _ status: StepStatus) -> some View {
-        switch status {
-        case .pending:
-            Text("\(number)").font(.callout.weight(.semibold)).foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
-                .background(Circle().fill(Color.secondary.opacity(0.15)))
-        case .running: ProgressView().controlSize(.small)
-        case .done: Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(.green)
-        case .failed: Image(systemName: "exclamationmark.circle.fill").font(.title2).foregroundStyle(.orange)
-        case .skipped: Image(systemName: "minus.circle.fill").font(.title2).foregroundStyle(.secondary)
+    private var progressText: String {
+        if flow.finished {
+            return problems.isEmpty
+                ? "All set. Print from this app, from any app's Print dialog, or with the labelbridge command."
+                : problems.joined(separator: "\n")
         }
+        if flow.running {
+            return (steps.first { $0.status == .running } ?? steps.first { $0.status == .pending })?.text ?? "Finishing…"
+        }
+        return "Setup adds the printer to macOS and installs the labelbridge command. macOS may ask for your password."
     }
 }
 

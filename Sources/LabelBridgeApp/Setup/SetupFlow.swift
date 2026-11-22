@@ -35,7 +35,11 @@ final class SetupFlow: ObservableObject {
         defer { running = false }
         guard moveToApplicationsIfNeeded() else { return }   // relaunches from /Applications
         await requestBluetooth()
+        printerQueue = .running
+        try? await Task.sleep(for: .milliseconds(250))     // let the window show the step before a password prompt
         installQueue()
+        cli = .running
+        try? await Task.sleep(for: .milliseconds(250))
         installCLI()
         applyLogin()
         if case .failed = printerQueue {} else { UserDefaults.standard.set(Self.setupVersion, forKey: "setupVersion") }

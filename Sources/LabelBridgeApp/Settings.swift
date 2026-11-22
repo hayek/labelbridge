@@ -25,7 +25,7 @@ enum Settings {
         set { d.set(newValue.rawValue, forKey: "alignment") }
     }
     static var openAtLogin: Bool {
-        get { d.object(forKey: "openAtLogin") as? Bool ?? true }
+        get { d.object(forKey: "openAtLogin") as? Bool ?? false }
         set { d.set(newValue, forKey: "openAtLogin") }
     }
     static var style: TextStyle { TextStyle(fontName: fontName, bold: bold, alignment: alignment) }

@@ -17,6 +17,19 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
     private var connected: OneShot<Void>?
     private(set) var links: [UUID: BLEPrinterLink] = [:]
     var onState: ((PrinterState) -> Void)?
+    /// Called with the printer's name each time it advertises (while watching or connecting).
+    var onSeen: ((String) -> Void)?
+    /// When true, keep scanning so the UI can show whether the printer is on.
+    var watching = false { didSet { resumeWatching() } }
+
+    private func resumeWatching() {
+        guard central.state == .poweredOn else { return }
+        if watching {
+            central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
+        } else if discovered == nil {
+            central.stopScan()
+        }
+    }
 
     override init() {
         super.init()
@@ -35,13 +48,14 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
                 discovered = shot
                 central.scanForPeripherals(withServices: nil)
             }
-        } onTimeout: { self.central.stopScan() }
+        } onTimeout: { self.central.stopScan(); self.resumeWatching() }
         central.stopScan()
         onState?(.found(name: peripheral.name ?? "D11"))
         try await OneShot<Void>().wait(timeout: .seconds(10), error: PrintError.busy) { shot in
             connected = shot
             central.connect(peripheral)
         } onTimeout: { self.central.cancelPeripheralConnection(peripheral) }
+        resumeWatching()
         let link = BLEPrinterLink(peripheral: peripheral, central: central)
         links[peripheral.identifier] = link
         try await link.prepare()
@@ -63,7 +77,7 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
     func centralManagerDidUpdateState(_ c: CBCentralManager) {
         Log.write("bluetooth state \(c.state.rawValue)")
         switch c.state {
-        case .poweredOn: MainActor.assumeIsolated { poweredOn?.resume(()) }; onState?(.idle)
+        case .poweredOn: MainActor.assumeIsolated { poweredOn?.resume(()) }; onState?(.idle); resumeWatching()
         case .unauthorized: onState?(.unauthorized); MainActor.assumeIsolated { poweredOn?.fail(PrintError.notFound) }
         case .poweredOff: onState?(.poweredOff); MainActor.assumeIsolated { poweredOn?.fail(PrintError.notFound) }
         default: break
@@ -74,6 +88,7 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
         let name = p.name ?? (ad[CBAdvertisementDataLocalNameKey] as? String) ?? ""
         let services = ad[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
         guard name.hasPrefix(Self.namePrefix) || services.contains(Self.service) else { return }
+        onSeen?(name.isEmpty ? "D11" : name)
         MainActor.assumeIsolated {
             guard let shot = discovered, shot.isPending else { return }
             discovered = nil
@@ -94,6 +109,7 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
         Log.write("disconnected \(error.map { "\($0)" } ?? "")")
         links.removeValue(forKey: p.identifier)?.didDisconnect()
         onState?(.idle)
+        resumeWatching()
     }
 }
 
