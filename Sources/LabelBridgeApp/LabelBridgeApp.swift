@@ -7,6 +7,7 @@ struct LabelBridgeApp: App {
         Window("LabelBridge", id: "main") {
             MainWindow()
         }
+        .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
             CommandGroup(after: .help) {
                 Button("Open Log") { NSWorkspace.shared.open(Log.url) }
