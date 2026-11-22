@@ -1,0 +1,63 @@
+*PPD-Adobe: "4.3"
+*FormatVersion: "4.3"
+*FileVersion: "1.0.0"
+*LanguageVersion: English
+*LanguageEncoding: ISOLatin1
+*PCFileName: "NIIMD11.PPD"
+*Manufacturer: "NIIMBOT"
+*Product: "(D11)"
+*ModelName: "NIIMBOT D11 LabelBridge"
+*ShortNickName: "NIIMBOT D11"
+*NickName: "NIIMBOT D11 via LabelBridge"
+*PSVersion: "(3010.000) 0"
+*LanguageLevel: "3"
+*ColorDevice: False
+*DefaultColorSpace: Gray
+*FileSystem: False
+*Throughput: "1"
+*LandscapeOrientation: Plus90
+*TTRasterizer: Type42
+*% LabelBridge.app receives the job as PDF on 127.0.0.1:9183 and prints it over Bluetooth.
+*cupsFilter2: "application/pdf application/pdf 0 -"
+
+*OpenUI *PageSize/Label Size: PickOne
+*OrderDependency: 10 AnySetup *PageSize
+*DefaultPageSize: 15x50mm
+*PageSize 15x50mm/15 x 50 mm: "<</PageSize[141.73 42.52]/ImagingBBox null>>setpagedevice"
+*PageSize 12x40mm/12 x 40 mm: "<</PageSize[113.39 34.02]/ImagingBBox null>>setpagedevice"
+*PageSize 14x40mm/14 x 40 mm: "<</PageSize[113.39 39.69]/ImagingBBox null>>setpagedevice"
+*PageSize 15x30mm/15 x 30 mm: "<</PageSize[85.04 42.52]/ImagingBBox null>>setpagedevice"
+*PageSize 12x22mm/12 x 22 mm: "<</PageSize[62.36 34.02]/ImagingBBox null>>setpagedevice"
+*PageSize 14x22mm/14 x 22 mm: "<</PageSize[62.36 39.69]/ImagingBBox null>>setpagedevice"
+*PageSize 15x40mm/15 x 40 mm: "<</PageSize[113.39 42.52]/ImagingBBox null>>setpagedevice"
+*CloseUI: *PageSize
+
+*OpenUI *PageRegion: PickOne
+*OrderDependency: 10 AnySetup *PageRegion
+*DefaultPageRegion: 15x50mm
+*PageRegion 15x50mm/15 x 50 mm: "<</PageSize[141.73 42.52]/ImagingBBox null>>setpagedevice"
+*PageRegion 12x40mm/12 x 40 mm: "<</PageSize[113.39 34.02]/ImagingBBox null>>setpagedevice"
+*PageRegion 14x40mm/14 x 40 mm: "<</PageSize[113.39 39.69]/ImagingBBox null>>setpagedevice"
+*PageRegion 15x30mm/15 x 30 mm: "<</PageSize[85.04 42.52]/ImagingBBox null>>setpagedevice"
+*PageRegion 12x22mm/12 x 22 mm: "<</PageSize[62.36 34.02]/ImagingBBox null>>setpagedevice"
+*PageRegion 14x22mm/14 x 22 mm: "<</PageSize[62.36 39.69]/ImagingBBox null>>setpagedevice"
+*PageRegion 15x40mm/15 x 40 mm: "<</PageSize[113.39 42.52]/ImagingBBox null>>setpagedevice"
+*CloseUI: *PageRegion
+
+*DefaultImageableArea: 15x50mm
+*ImageableArea 15x50mm/15 x 50 mm: "0 0 141.73 42.52"
+*ImageableArea 12x40mm/12 x 40 mm: "0 0 113.39 34.02"
+*ImageableArea 14x40mm/14 x 40 mm: "0 0 113.39 39.69"
+*ImageableArea 15x30mm/15 x 30 mm: "0 0 85.04 42.52"
+*ImageableArea 12x22mm/12 x 22 mm: "0 0 62.36 34.02"
+*ImageableArea 14x22mm/14 x 22 mm: "0 0 62.36 39.69"
+*ImageableArea 15x40mm/15 x 40 mm: "0 0 113.39 42.52"
+
+*DefaultPaperDimension: 15x50mm
+*PaperDimension 15x50mm/15 x 50 mm: "141.73 42.52"
+*PaperDimension 12x40mm/12 x 40 mm: "113.39 34.02"
+*PaperDimension 14x40mm/14 x 40 mm: "113.39 39.69"
+*PaperDimension 15x30mm/15 x 30 mm: "85.04 42.52"
+*PaperDimension 12x22mm/12 x 22 mm: "62.36 34.02"
+*PaperDimension 14x22mm/14 x 22 mm: "62.36 39.69"
+*PaperDimension 15x40mm/15 x 40 mm: "113.39 42.52"

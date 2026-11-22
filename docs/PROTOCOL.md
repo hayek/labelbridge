@@ -60,3 +60,9 @@ Hardware results:
 - **Copies:** `copies = 2` in page size with total = 2 prints two identical labels; the counter jumps by 2.
 - **Busy:** while the NIIMBOT phone app is connected, the printer stops advertising, so a Mac scan doesn't find it.
   LabelBridge reports "printer not found" after 15 s.
+
+## Print dialog (CUPS)
+
+The bundled PPD (`NIIMBOT_D11.ppd`) declares `*cupsFilter2: "application/pdf application/pdf 0 -"`, so CUPS runs no
+driver filter and passes the job through as **PDF** (verified: the bytes arriving on the socket start with `%PDF-1.3`).
+The queue uses `socket://127.0.0.1:9183`, where LabelBridge.app renders each PDF page onto one label.
