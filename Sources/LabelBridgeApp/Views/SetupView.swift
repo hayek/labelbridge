@@ -17,30 +17,29 @@ struct SetupView: View {
             .padding(.top, 8)
             .padding(.bottom, 20)
 
-            VStack(spacing: 0) {
-                step("folder.fill", .blue, "Move to Applications",
-                     "Keeps the printer and the command working.", flow.applications)
-                Divider().padding(.leading, 52)
-                step("antenna.radiowaves.left.and.right", .indigo, "Allow Bluetooth",
-                     "Lets LabelBridge talk to your D11.", flow.bluetooth)
-                Divider().padding(.leading, 52)
-                step("printer.fill", .gray, "Add the printer",
-                     "Shows up in every app's Print dialog.", flow.printerQueue)
-                Divider().padding(.leading, 52)
-                step("terminal.fill", .black, "Install the labelbridge command",
-                     "Print from Terminal, scripts and AI assistants.", flow.cli)
-                Divider().padding(.leading, 52)
-                step("power", .orange, "Open at login",
-                     "Runs in the background so printing just works.", flow.login)
+            VStack(alignment: .leading, spacing: 14) {
+                Text(flow.finished ? "Setup finished:" : "Clicking Start Setup will:")
+                    .font(.headline)
+                VStack(alignment: .leading, spacing: 0) {
+                    step(1, "Move LabelBridge to Applications",
+                         "Keeps the printer and the command working.", flow.applications)
+                    step(2, "Ask for Bluetooth access",
+                         "So LabelBridge can talk to your D11.", flow.bluetooth)
+                    step(3, "Add the printer “NIIMBOT D11”",
+                         "So it shows up in every app's Print dialog.", flow.printerQueue)
+                    step(4, "Install the labelbridge command",
+                         "So Terminal, scripts and AI assistants can print.", flow.cli)
+                    step(5, "Open LabelBridge at login",
+                         "Runs in the background so printing just works.", flow.login, last: true)
+                }
             }
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Text(footer)
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 14)
+                .padding(.top, 18)
 
             HStack {
                 Spacer()
@@ -48,12 +47,12 @@ struct SetupView: View {
                     Button("Done") { onClose() }.keyboardShortcut(.defaultAction)
                 } else {
                     Button("Not Now") { onClose() }.disabled(flow.running)
-                    Button(flow.running ? "Setting Up…" : "Set Up") { Task { await flow.runAll() } }
+                    Button(flow.running ? "Setting Up…" : "Start Setup") { Task { await flow.runAll() } }
                         .keyboardShortcut(.defaultAction).disabled(flow.running)
                 }
             }
             .controlSize(.large)
-            .padding(.top, 14)
+            .padding(.top, 16)
         }
         .padding(24)
         .frame(width: 460)
@@ -62,17 +61,18 @@ struct SetupView: View {
     private var footer: String {
         flow.finished
             ? "All set. Turn the D11 on, and keep the NIIMBOT phone app disconnected while printing from the Mac."
-            : "You may be asked for your password to add the printer and the command."
+            : "It takes a few seconds. macOS may ask for your password."
     }
 
     @ViewBuilder
-    private func step(_ symbol: String, _ tint: Color, _ title: String, _ detail: String, _ status: StepStatus) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(RoundedRectangle(cornerRadius: 7).fill(tint.gradient))
+    private func step(_ number: Int, _ title: String, _ detail: String, _ status: StepStatus, last: Bool = false) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(spacing: 0) {
+                marker(number, status).frame(width: 24, height: 24)
+                if !last {
+                    Rectangle().fill(.separator).frame(width: 1).frame(maxHeight: .infinity)
+                }
+            }
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(.body.weight(.medium))
                 Group {
@@ -85,21 +85,22 @@ struct SetupView: View {
                 .font(.callout).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 8)
-            statusMark(status).frame(width: 20)
+            .padding(.top, 2)
+            .padding(.bottom, last ? 0 : 14)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
     }
 
     @ViewBuilder
-    private func statusMark(_ status: StepStatus) -> some View {
+    private func marker(_ number: Int, _ status: StepStatus) -> some View {
         switch status {
-        case .pending: EmptyView()
+        case .pending:
+            Text("\(number)").font(.callout.weight(.semibold)).foregroundStyle(.secondary)
+                .frame(width: 24, height: 24)
+                .background(Circle().fill(Color.secondary.opacity(0.15)))
         case .running: ProgressView().controlSize(.small)
-        case .done: Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(.green)
-        case .failed: Image(systemName: "exclamationmark.triangle.fill").font(.title3).foregroundStyle(.orange)
-        case .skipped: Image(systemName: "minus.circle.fill").font(.title3).foregroundStyle(.tertiary)
+        case .done: Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(.green)
+        case .failed: Image(systemName: "exclamationmark.circle.fill").font(.title2).foregroundStyle(.orange)
+        case .skipped: Image(systemName: "minus.circle.fill").font(.title2).foregroundStyle(.secondary)
         }
     }
 }
