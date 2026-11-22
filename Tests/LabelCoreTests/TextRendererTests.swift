@@ -75,6 +75,14 @@ final class TextRendererTests: XCTestCase {
         XCTAssertLessThan(centroidX("Hello"), 591 / 2)
     }
 
+    func testGlyphsAreNotClippedVertically() {
+        for text in ["محمد علي", "gjpqy Ägypten", "יוסי לוי"] {
+            let b = TextRenderer.render(text, size: size, style: center).bitmap
+            XCTAssertTrue(ink(b, ys: 0..<1).isEmpty, "touches top: \(text)")
+            XCTAssertTrue(ink(b, ys: 141..<142).isEmpty, "touches bottom: \(text)")
+        }
+    }
+
     func testTwoLinesUseTwoBands() {
         let b = TextRenderer.render("A\nB", size: size, style: center).bitmap
         XCTAssertFalse(ink(b, ys: 0..<71).isEmpty)

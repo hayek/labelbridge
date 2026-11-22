@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 /// Background services started with the app (IPC server in Task 7, CUPS listener in Task 8, setup in Task 9).
 enum AppServices {
-    static func start() {}
+    static func start() { IPCService.start() }
 }
 
 /// Placeholders replaced in Task 9.

@@ -19,8 +19,8 @@ final class PrintService: ObservableObject {
         scanner.onState = { [weak self] s in Task { @MainActor in self?.state = s } }
     }
 
-    func print(_ job: LabelJob) async -> JobResult {
-        await track { await self.queue.submit(job, progress: self.progressHandler()) }
+    func print(_ job: LabelJob, onProgress: (@Sendable (Int, Int) -> Void)? = nil) async -> JobResult {
+        await track { await self.queue.submit(job, progress: self.progressHandler(onProgress)) }
     }
 
     func print(bitmaps: [Bitmap], settings: PrintSettings) async -> JobResult {
@@ -37,8 +37,8 @@ final class PrintService: ObservableObject {
         return result
     }
 
-    private nonisolated func progressHandler() -> JobQueue.Progress {
-        { done, total in Task { @MainActor in
+    private nonisolated func progressHandler(_ extra: (@Sendable (Int, Int) -> Void)? = nil) -> JobQueue.Progress {
+        { done, total in extra?(done, total); Task { @MainActor in
             PrintService.shared.progress = (done, total)
             PrintService.shared.state = .printing(done, total)
         } }

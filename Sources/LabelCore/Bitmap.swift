@@ -13,3 +13,17 @@ public struct Bitmap: Equatable, Sendable {
 
     public func isBlack(x: Int, y: Int) -> Bool { pixels[y * width + x] }
 }
+
+import AppKit
+
+extension Bitmap {
+    /// PNG of the label as it will print (black on white).
+    public func pngData() -> Data {
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8,
+                                   samplesPerPixel: 1, hasAlpha: false, isPlanar: false,
+                                   colorSpaceName: .deviceWhite, bytesPerRow: width, bitsPerPixel: 8)!
+        let p = rep.bitmapData!
+        for y in 0..<height { for x in 0..<width { p[y * width + x] = isBlack(x: x, y: y) ? 0 : 255 } }
+        return rep.representation(using: .png, properties: [:]) ?? Data()
+    }
+}

@@ -1,1 +1,3 @@
-// CLI entry point — implemented in Task 7.
+import ArgumentParser
+
+LabelBridgeCLI.main()
