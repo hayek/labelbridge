@@ -19,7 +19,7 @@ public struct LabelJob: Codable, Sendable {
     }
 }
 
-public enum JobFailure: String, Codable, Sendable { case badInput, notFound, busy, failedMidJob, timeout, appUnavailable }
+public enum JobFailure: String, Codable, Sendable { case badInput, notFound, busy, failedMidJob, timeout, printerError, appUnavailable }
 
 public struct JobResult: Codable, Sendable, Equatable {
     public var ok: Bool
@@ -107,10 +107,15 @@ public actor JobQueue {
             return JobResult(ok: false, printed: 0, total: total, error: "Printer not found. Turn on the D11 and disconnect the NIIMBOT phone app.", failure: .notFound)
         case .busy?:
             return JobResult(ok: false, printed: 0, total: total, error: "The printer is busy or connected to another device.", failure: .busy)
+        case .printer(let code, let printed)?:
+            let when = printed > 0 ? " after \(printed) of \(total) labels" : ""
+            return JobResult(ok: false, printed: printed, total: total,
+                             error: "The printer stopped with an error\(when): \(PrinterProblem.describe(code)) If its light stays red, turn it off and on.",
+                             failure: .printerError)
         case .failedMidJob(let printed)?:
             return JobResult(ok: false, printed: printed, total: total, error: "Printing stopped after \(printed) of \(total) labels.", failure: .failedMidJob)
         default:
-            return JobResult(ok: false, printed: 0, total: total, error: "The printer did not respond.", failure: .timeout)
+            return JobResult(ok: false, printed: 0, total: total, error: "The printer did not respond. If its light is red, open and close the lid or turn it off and on, then try again.", failure: .timeout)
         }
     }
 }

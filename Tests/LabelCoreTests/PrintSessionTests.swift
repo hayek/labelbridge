@@ -79,3 +79,54 @@ final class InboxTests: XCTestCase {
         XCTAssertNotNil(second)
     }
 }
+
+final class PrinterErrorTests: XCTestCase {
+    private func page() -> EncodedPage {
+        RowEncoder.encode(Bitmap(width: 4, height: 142, pixels: (0..<(4 * 142)).map { $0 % 3 == 0 }))
+    }
+    /// A long status timeout: a printer error must end the job right away, not after this.
+    private func session(_ link: SimulatedPrinter) -> PrintSession {
+        PrintSession(link: link, replyTimeout: .milliseconds(100), statusTimeout: .seconds(20),
+                     rowInterval: .zero, pollInterval: .milliseconds(10))
+    }
+
+    func testPrinterErrorPacketEndsTheJobAtOnceWithItsCode() async {
+        let printer = SimulatedPrinter()
+        printer.errorAfterPages = 2       // label 1 done, error while label 2 prints
+        printer.errorCode = 0x08
+        let start = Date()
+        do {
+            _ = try await session(printer).run(pages: [page(), page(), page()], settings: PrintSettings(density: 3, copies: 1)) { _, _ in }
+            XCTFail("expected failure")
+        } catch {
+            XCTAssertEqual(error as? PrintError, .printer(code: 8, printed: 1))
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(start), 3)
+    }
+
+    func testErrorByteInStatusReplyEndsTheJob() async {
+        let printer = SimulatedPrinter()
+        printer.statusErrorCode = 0x02
+        do {
+            _ = try await session(printer).run(pages: [page()], settings: PrintSettings(density: 3, copies: 1)) { _, _ in }
+            XCTFail("expected failure")
+        } catch {
+            XCTAssertEqual(error as? PrintError, .printer(code: 2, printed: 0))
+        }
+    }
+
+    func testPrinterErrorBecomesAReadableResult() {
+        let r = JobQueue.failureResult(PrintError.printer(code: 2, printed: 3), total: 9)
+        XCTAssertFalse(r.ok)
+        XCTAssertEqual(r.printed, 3)
+        XCTAssertEqual(r.failure, .printerError)
+        XCTAssertTrue(r.error?.contains("out of labels") == true, r.error ?? "")
+        XCTAssertTrue(r.error?.contains("3 of 9") == true, r.error ?? "")
+        XCTAssertEqual(ExitCode.for(r), 4)
+    }
+
+    func testUnknownPrinterErrorCodeStillNamesTheCode() {
+        XCTAssertTrue(PrinterProblem.describe(0x99).contains("153"))
+        XCTAssertTrue(PrinterProblem.describe(0x01).lowercased().contains("lid"))
+    }
+}

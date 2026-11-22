@@ -12,6 +12,12 @@ final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
     private var pageEnds = 0
     var answerConnect = true
     var stopAfterPages: Int?
+    /// After this many pages, the printer reports `errorCode` in a 0xDB packet and goes silent (red LED).
+    var errorAfterPages: Int?
+    var errorCode: UInt8 = 0x08
+    /// When set, status replies are the 10-byte form carrying this error byte.
+    var statusErrorCode: UInt8?
+    private var errored = false
     var onSend: ((Packet) -> Void)?
 
     init() {
@@ -28,6 +34,16 @@ final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
             sent.append(p)
             onSend?(p)
             if let stop = stopAfterPages, pageEnds >= stop { continue }   // printer went silent
+            if errored { continue }
+            if let n = errorAfterPages, pageEnds >= n, p.cmd == Cmd.printStatus.rawValue {
+                errored = true
+                reply(0xDB, [errorCode])
+                continue
+            }
+            if let code = statusErrorCode, p.cmd == Cmd.printStatus.rawValue {
+                reply(0xB3, Packet.u16(pageCounter) + [0, 0, 0, 0, code, 0, 0, 0])
+                continue
+            }
             switch p.cmd {
             case Cmd.connect.rawValue: if answerConnect { reply(0xC2, [3]) }
             case Cmd.setPageSize.rawValue:

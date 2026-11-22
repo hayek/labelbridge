@@ -96,6 +96,8 @@ struct HelpView: View {
         case .trouble:
             Item("“Looking for your D11…” or exit code 3",
                  "The printer is off, asleep or out of range, or the NIIMBOT phone app is connected to it. Close the phone app or turn off the phone's Bluetooth, then turn the printer on.")
+            Item("The printer's light turns red and printing stops",
+                 "The printer found a problem, usually labels not seated (it can't find the next label) or the lid not fully closed. LabelBridge shows the printer's reason. Open the lid, reseat the roll, close it firmly, and turn the printer off and on if the light stays red.")
             Item("“Bluetooth access needed”",
                  "Allow LabelBridge in System Settings › Privacy & Security › Bluetooth.")
             Item("The print is too light", "Raise the darkness in the window, or use `--density 4`.")

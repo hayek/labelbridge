@@ -9,6 +9,7 @@ final class BLEPrinterLink: NSObject, PrinterLink, CBPeripheralDelegate, @unchec
     private var parser = FrameParser()
     private var continuation: AsyncStream<Packet>.Continuation!
     let replies: AsyncStream<Packet>
+    fileprivate var lastStatusLine = ""
     private var ready: OneShot<Void>?
     private var canSend: OneShot<Void>?
     private var disconnected = false
@@ -82,10 +83,23 @@ final class BLEPrinterLink: NSObject, PrinterLink, CBPeripheralDelegate, @unchec
     }
 
     func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
-        for packet in parser.feed([UInt8](ch.value ?? Data())) { continuation.yield(packet) }
+        for packet in parser.feed([UInt8](ch.value ?? Data())) {
+            logIfNew(packet)
+            continuation.yield(packet)
+        }
     }
 
     func peripheralIsReady(toSendWriteWithoutResponse p: CBPeripheral) {
         MainActor.assumeIsolated { canSend?.resume(()); canSend = nil }
+    }
+}
+
+extension BLEPrinterLink {
+    /// Logs what the printer says during a job (status replies only when they change), for diagnosing problems.
+    fileprivate func logIfNew(_ p: Packet) {
+        let line = String(format: "printer → %02X", p.cmd) + " " + p.data.map { String(format: "%02x", $0) }.joined(separator: " ")
+        if p.cmd == 0xB3, line == lastStatusLine { return }
+        if p.cmd == 0xB3 { lastStatusLine = line }
+        Log.write(p.cmd == 0xDB ? line + "  (printer error \(p.data.first.map(Int.init) ?? 0): \(PrinterProblem.describe(Int(p.data.first ?? 0))))" : line)
     }
 }

@@ -28,11 +28,15 @@ public final class PrintSession: @unchecked Sendable {
         defer { pump?.cancel() }
 
         let total = pages.count * settings.copies
-        guard try await request(Packet(.connect), expect: 0xC2, tries: 3) != nil else { throw PrintError.busy }
-        try await require(Packet(.setLabelType, [1]), 0x33)
-        try await require(Packet(.setDensity, [UInt8(settings.density)]), 0x31)
-        // printStart9b: total pages u16, 0,0,0,0, page color (0 = single), speed 1, flag 0
-        try await require(Packet(.printStart, Packet.u16(total) + [0, 0, 0, 0, 0, 1, 0]), 0x02)
+        do {
+            guard try await request(Packet(.connect), expect: 0xC2, tries: 3) != nil else { throw PrintError.busy }
+            try await require(Packet(.setLabelType, [1]), 0x33)
+            try await require(Packet(.setDensity, [UInt8(settings.density)]), 0x31)
+            // printStart9b: total pages u16, 0,0,0,0, page color (0 = single), speed 1, flag 0
+            try await require(Packet(.printStart, Packet.u16(total) + [0, 0, 0, 0, 0, 1, 0]), 0x02)
+        } catch let r as PrinterReported {
+            throw PrintError.printer(code: r.code, printed: 0)
+        }
 
         var printed = 0
         do {
@@ -50,6 +54,8 @@ public final class PrintSession: @unchecked Sendable {
                 printed += settings.copies
                 progress(printed, total)
             }
+        } catch let r as PrinterReported {
+            throw PrintError.printer(code: r.code, printed: printed)
         } catch {
             throw PrintError.failedMidJob(printed: printed)
         }
@@ -62,8 +68,11 @@ public final class PrintSession: @unchecked Sendable {
         let deadline = ContinuousClock.now + statusTimeout
         await inbox.discard(0xB3)    // drop the reply to the un-awaited printStatus
         while ContinuousClock.now < deadline {
-            if let s = try await request(Packet(.printStatus), expect: 0xB3, tries: 1), s.data.count >= 2,
-               Int(s.data[0]) << 8 | Int(s.data[1]) >= target { return }
+            if let s = try await request(Packet(.printStatus), expect: 0xB3, tries: 1), s.data.count >= 2 {
+                // The 10-byte status form carries an error byte at offset 6 (niimbluelib parsePrintStatusResponse).
+                if s.data.count >= 10, s.data[6] != 0 { throw PrinterReported(code: Int(s.data[6])) }
+                if Int(s.data[0]) << 8 | Int(s.data[1]) >= target { return }
+            }
             try await Task.sleep(for: pollInterval)
         }
         throw PrintError.timeout
@@ -76,25 +85,43 @@ public final class PrintSession: @unchecked Sendable {
     private func request(_ packet: Packet, expect reply: UInt8, tries: Int) async throws -> Packet? {
         for _ in 0..<tries {
             try await link.send(packet.bytes())
-            if let p = await inbox.take(reply, timeout: replyTimeout) { return p }
+            if let p = await inbox.take(reply, timeout: replyTimeout) {
+                if p.cmd == PrinterReported.packet { throw PrinterReported(code: Int(p.data.first ?? 0)) }
+                return p
+            }
         }
         return nil
     }
 }
 
+/// The printer sent its error packet (0xDB): it stopped and its LED is red.
+struct PrinterReported: Error {
+    static let packet: UInt8 = 0xDB
+    let code: Int
+}
+
 /// Holds packets from the printer until someone asks for one with a given command.
+/// A printer error packet answers every wait from then on, so no step waits out its timeout.
 actor Inbox {
     private var packets: [Packet] = []
     private var waiter: (cmd: UInt8, token: Int, cont: CheckedContinuation<Packet?, Never>)?
     private var nextToken = 0
 
+    private var printerError: Packet?
+
     func put(_ p: Packet) {
+        if p.cmd == PrinterReported.packet {
+            printerError = p
+            if let w = waiter { waiter = nil; w.cont.resume(returning: p) }
+            return
+        }
         if let w = waiter, w.cmd == p.cmd { waiter = nil; w.cont.resume(returning: p) } else { packets.append(p) }
     }
 
     func discard(_ cmd: UInt8) { packets.removeAll { $0.cmd == cmd } }
 
     func take(_ cmd: UInt8, timeout: Duration) async -> Packet? {
+        if let e = printerError { return e }
         if let i = packets.firstIndex(where: { $0.cmd == cmd }) { return packets.remove(at: i) }
         nextToken += 1
         let token = nextToken

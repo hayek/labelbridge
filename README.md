@@ -199,6 +199,7 @@ Choose **NIIMBOT D11 (Bluetooth)** in the Print dialog and pick a label size und
 ## Troubleshooting
 
 - **"Looking for your D11…" or exit code 3:** the printer is off, asleep or out of range, or the NIIMBOT phone app is connected to it. Close the app or turn off Bluetooth on the phone, then turn the printer on.
+- **The printer's light turns red and printing stops:** the printer found a problem, usually labels not seated, so it can't find the next label, or the lid not fully closed. LabelBridge shows the printer's reason. Open the lid, reseat the roll, close it firmly, and turn the printer off and on if the light stays red.
 - **Bluetooth access needed:** allow LabelBridge in System Settings › Privacy & Security › Bluetooth.
 - **Text looks too light:** raise the darkness.
 - **Logs:** `~/Library/Logs/LabelBridge.log`. Open them from Help › Open Log.
