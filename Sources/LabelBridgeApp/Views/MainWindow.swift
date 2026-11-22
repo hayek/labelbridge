@@ -32,7 +32,15 @@ struct MainWindow: View {
         }
         .frame(minWidth: 960, minHeight: 540)
         .toolbar {
-            ToolbarItem(placement: .status) { ToolbarPrinterStatus() }
+            ToolbarItemGroup(placement: .automatic) {
+                Spacer()
+                ToolbarPrinterStatus()
+                Spacer()
+                Button { openWindow(id: "help") } label: {
+                    Label("Help", systemImage: "questionmark.circle")
+                }
+                .help("LabelBridge Help (⌘?)")
+            }
         }
         .onAppear { MainWindowOpener.open = { [openWindow] in openWindow(id: "main") } }
     }
