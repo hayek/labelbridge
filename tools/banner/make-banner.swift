@@ -16,21 +16,23 @@ NSGraphicsContext.current = flipped
 let cg = flipped.cgContext
 cg.translateBy(x: 0, y: H); cg.scaleBy(x: 1, y: -1)   // top-left origin
 
-// Background colour sampled from the photo's corner.
-let photoRep = NSBitmapImageRep(data: photo.tiffRepresentation!)!
-let bg = photoRep.colorAt(x: 20, y: 20)!.usingColorSpace(.deviceRGB)!
+// Background: deep navy with a soft blue glow; the printer (a transparent cut-out) on the right.
+let bg = NSColor(red: 0.055, green: 0.07, blue: 0.10, alpha: 1)
 bg.setFill(); NSRect(x: 0, y: 0, width: W, height: H).fill()
-
-// Photo: scaled to the banner height, shifted right, left edge faded into the background.
-let scale = H / photoRep.size.height * 1.02
-let pw = photoRep.size.width * scale, ph = photoRep.size.height * scale
-let px = W - pw + 230, py = (H - ph) / 2 + 10
-photo.draw(in: NSRect(x: px, y: py, width: pw, height: ph), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-let fade = NSGradient(colors: [bg, bg.withAlphaComponent(0)])!
-fade.draw(in: NSRect(x: px - 2, y: 0, width: 260, height: H), angle: 0)
-// subtle blue glow top-left
-NSGradient(colors: [NSColor(red: 0.25, green: 0.35, blue: 0.85, alpha: 0.16), NSColor(red: 0.25, green: 0.35, blue: 0.85, alpha: 0)])!
+NSGradient(colors: [NSColor(red: 0.25, green: 0.35, blue: 0.85, alpha: 0.18), NSColor(red: 0.25, green: 0.35, blue: 0.85, alpha: 0)])!
     .draw(fromCenter: NSPoint(x: 200, y: 120), radius: 0, toCenter: NSPoint(x: 200, y: 120), radius: 900, options: [])
+let ph: CGFloat = 700
+let pw = photo.size.width * ph / photo.size.height
+let px = W - pw - 130, py = (H - ph) / 2 + 20
+// light pool behind the printer
+NSGradient(colors: [NSColor(white: 1, alpha: 0.10), NSColor(white: 1, alpha: 0)])!
+    .draw(fromCenter: NSPoint(x: px + pw / 2, y: py + ph / 2), radius: 0, toCenter: NSPoint(x: px + pw / 2, y: py + ph / 2), radius: ph * 0.62, options: [])
+// floor shadow
+NSGraphicsContext.saveGraphicsState()
+let floor = NSShadow(); floor.shadowColor = NSColor.black.withAlphaComponent(0.7); floor.shadowBlurRadius = 60; floor.shadowOffset = NSSize(width: 0, height: -30)
+floor.set()
+photo.draw(in: NSRect(x: px, y: py, width: pw, height: ph), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: [.interpolation: NSImageInterpolation.high])
+NSGraphicsContext.restoreGraphicsState()
 
 func font(_ size: CGFloat, _ weight: NSFont.Weight) -> NSFont { NSFont.systemFont(ofSize: size, weight: weight) }
 func draw(_ s: NSAttributedString, at p: NSPoint) { s.draw(at: p) }
