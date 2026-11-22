@@ -151,11 +151,11 @@ private struct Code: View {
     init(_ text: String) { self.text = text }
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                Text(text).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
-                    .fixedSize().padding(12).padding(.trailing, 64)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            // No inner scroll view: it would swallow the page's vertical scrolling.
+            Text(text).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12).padding(.trailing, 64)
             Button(copied ? "Copied" : "Copy") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(text, forType: .string)
@@ -182,7 +182,7 @@ enum CLIHelp {
         let p = Process()
         p.executableURL = tool
         p.arguments = args
-        p.environment = ["COLUMNS": "80"]
+        p.environment = ["COLUMNS": "66"]   // fits the help page without wrapping
         let pipe = Pipe()
         p.standardOutput = pipe
         p.standardError = pipe

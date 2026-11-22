@@ -22,8 +22,10 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
     /// When true, keep scanning so the UI can show whether the printer is on.
     var watching = false { didSet { resumeWatching() } }
 
+    /// Watching scans only while no printer connection is open: scanning during a print job
+    /// competes for the radio and made the D11 stop mid-batch (hardware-verified).
     private func resumeWatching() {
-        guard central.state == .poweredOn else { return }
+        guard central.state == .poweredOn, links.isEmpty, connected == nil else { return }
         if watching {
             central.scanForPeripherals(withServices: nil, options: [CBCentralManagerScanOptionAllowDuplicatesKey: true])
         } else if discovered == nil {
@@ -60,7 +62,6 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
                 connected = shot
                 central.connect(found)
             }
-            resumeWatching()
             let link = BLEPrinterLink(peripheral: found, central: central)
             links[found.identifier] = link
             try await link.prepare()

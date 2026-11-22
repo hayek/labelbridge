@@ -19,12 +19,14 @@ struct LabelBridgeCLI: ParsableCommand {
           labelbridge preview "Dana" --out /tmp/labels
 
         FOR AI AGENTS:
-          To print labels, run `labelbridge print --json` with one label per argument.
+          Add to the agent's instructions:
+          "To print labels, run `labelbridge print --json`
+           with one label per argument."
 
         EXIT CODES:
           0  printed
           2  bad input
-          3  printer not found or busy (turn it on; disconnect the NIIMBOT phone app)
+          3  printer off, asleep, or busy (phone app connected)
           4  printing failed (the JSON says how many labels printed)
           5  LabelBridge.app not available
         """,
