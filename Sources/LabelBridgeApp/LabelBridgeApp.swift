@@ -20,8 +20,15 @@ struct LabelBridgeApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        Log.write("LabelBridge started")
+        let atLogin = LoginItem.launchedAtLogin
+        Log.write("LabelBridge started\(atLogin ? " (login item)" : "")")
         AppServices.start()
+        if atLogin {
+            // Opened at login: stay in the background so the CLI and Print dialog work.
+            DispatchQueue.main.async { NSApp.windows.forEach { $0.close() }; NSApp.hide(nil) }
+        } else if SetupFlow.needsSetup() {
+            DispatchQueue.main.async { SetupCoordinator.shared.present(repair: false) }
+        }
     }
 
     /// Closing the window keeps the app running for CLI and Print-dialog jobs.
@@ -33,10 +40,3 @@ enum AppServices {
     static func start() { IPCService.start(); CUPSListener.start() }
 }
 
-/// Placeholders replaced in Task 9.
-enum LoginItem { static func apply(_ on: Bool) {} }
-@MainActor final class SetupCoordinator {
-    static let shared = SetupCoordinator()
-    func present(repair: Bool) {}
-    func confirmUninstall() {}
-}
