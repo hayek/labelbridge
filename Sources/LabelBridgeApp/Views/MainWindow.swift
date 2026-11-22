@@ -4,6 +4,7 @@ import LabelCore
 /// Main window: labels on the left, a live preview in the middle, options and Print on the right.
 struct MainWindow: View {
     @ObservedObject var service = PrintService.shared
+    @Environment(\.openWindow) private var openWindow
     @State private var text = ""
     @State private var size = Settings.labelSize
     @State private var density = Settings.density
@@ -33,6 +34,7 @@ struct MainWindow: View {
         .toolbar {
             ToolbarItem(placement: .status) { ToolbarPrinterStatus() }
         }
+        .onAppear { MainWindowOpener.open = { [openWindow] in openWindow(id: "main") } }
     }
 
     // MARK: - Labels
@@ -187,7 +189,7 @@ struct MainWindow: View {
     private func print() async {
         printing = true
         outcome = nil
-        let job = LabelJob(items: text.components(separatedBy: .newlines), size: size, style: style,
+        let job = LabelJob(items: Batch.lines(from: text), size: size, style: style,
                            settings: PrintSettings(density: density, copies: copies), source: .window)
         let r = await service.print(job)
         printing = false
@@ -222,7 +224,5 @@ struct ToolbarPrinterStatus: View {
         .popover(isPresented: $showDetails, arrowEdge: .bottom) {
             PrinterStatusView().padding(16).frame(width: 340)
         }
-        .onAppear { service.watchPrinter(true) }
-        .onDisappear { service.watchPrinter(false) }
     }
 }

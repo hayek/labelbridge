@@ -30,7 +30,10 @@ struct LabelOptions: ParsableArguments {
 
     func lines() throws -> [String] {
         var lines: [String] = []
-        if let file { lines += try String(contentsOfFile: file, encoding: .utf8).components(separatedBy: .newlines) }
+        if let file {
+            guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { throw ValidationError("Can't read \(file) as UTF-8 text.") }
+            lines += Batch.lines(from: text)
+        }
         for item in items {
             if item == "-" { while let l = Swift.readLine(strippingNewline: true) { lines.append(l) } } else { lines.append(item) }
         }
@@ -69,14 +72,21 @@ struct Print: ParsableCommand {
         if Batch.items(from: job.items).items.isEmpty {
             finish(JobResult(ok: false, printed: 0, total: 0, error: "No labels to print.", failure: .badInput))
         }
+        var lastProgress = (done: 0, total: 0)
         do {
             let message = try AppConnection.send(.print(job)) { done, total in
+                lastProgress = (done, total)
                 if !json { FileHandle.standardError.write(Data("Printing label \(done) of \(total)…\n".utf8)) }
             }
             guard case .result(let r) = message else { throw IPCError.closed }
             finish(r)
-        } catch {
+        } catch IPCError.notRunning {
             finish(JobResult(ok: false, printed: 0, total: 0, error: AppConnection.unavailableMessage, failure: .appUnavailable))
+        } catch {
+            // The app received the job but went away (quit or crashed) before answering.
+            let printed = lastProgress.done            // progress is reported after each label finishes
+            finish(JobResult(ok: false, printed: printed, total: lastProgress.total,
+                             error: "LabelBridge stopped while printing, after \(printed) of \(lastProgress.total) labels.", failure: .failedMidJob))
         }
     }
 

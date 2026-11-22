@@ -32,6 +32,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Clicking the Dock icon (or opening the app again) brings the main window back.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { MainWindowOpener.open?() }
+        return true
+    }
+
     /// Closing the window keeps the app running for CLI and Print-dialog jobs.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
 }
@@ -41,3 +47,9 @@ enum AppServices {
     static func start() { IPCService.start(); CUPSListener.start() }
 }
 
+
+/// Lets AppKit code reopen the SwiftUI main window after it was closed.
+@MainActor
+enum MainWindowOpener {
+    static var open: (() -> Void)?
+}

@@ -93,16 +93,20 @@ struct SetupView: View {
 final class SetupCoordinator {
     static let shared = SetupCoordinator()
     private var window: NSWindow?
-    private let flow = SetupFlow()
+    private var flow = SetupFlow()
 
+    /// Shows the setup window. Unless setup is running, it starts fresh (so Repair can run again).
     func present(repair: Bool) {
         if window == nil {
             let w = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
             w.title = "LabelBridge Setup"
             w.isReleasedWhenClosed = false
-            w.contentView = NSHostingView(rootView: SetupView(flow: flow) { [weak self] in self?.window?.close() })
-            w.center()
             window = w
+        }
+        if !flow.running || window?.contentView == nil {
+            if !flow.running { flow = SetupFlow() }
+            window?.contentView = NSHostingView(rootView: SetupView(flow: flow) { [weak self] in self?.window?.close() })
+            window?.center()
         }
         window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

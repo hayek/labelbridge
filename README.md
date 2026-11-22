@@ -61,7 +61,7 @@ labelbridge sizes                                 # built-in label sizes
 - `0` printed
 - `2` bad input
 - `3` printer not found or busy
-- `4` printing failed partway (the JSON output says how many labels printed)
+- `4` printing failed, for example the printer stopped answering (the JSON output says how many labels printed)
 - `5` LabelBridge.app not available
 
 The command talks to LabelBridge.app, which owns the Bluetooth connection. If the app isn't running, the command opens it in the background.

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum IPCError: Error { case socket(String), closed }
+public enum IPCError: Error, Equatable { case socket(String), notRunning, closed }
 
 /// Serves newline-delimited JSON requests on a Unix domain socket (owner-only, mode 0600).
 public final class IPCServer: @unchecked Sendable {
@@ -36,6 +36,7 @@ public final class IPCServer: @unchecked Sendable {
         while running {
             let client = accept(fd, nil, nil)
             guard client >= 0 else { if running { continue } else { return } }
+            noSigPipe(client)   // a client that hangs up mid-job must not kill the app
             let handler = self.handler
             Thread.detachNewThread {
                 guard let line = readLine(client), let request = try? IPCCoding.decode(IPCRequest.self, from: line) else { close(client); return }
@@ -59,12 +60,14 @@ public struct IPCClient: Sendable {
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else { throw IPCError.socket("socket") }
         defer { close(fd) }
+        noSigPipe(fd)
         var addr = try sockaddrUnix(path)
         let ok = withUnsafePointer(to: &addr) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(fd, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) } }
-        guard ok == 0 else { throw IPCError.socket("connect \(errno)") }
+        // Only a failed connect means the app isn't running; anything after this point is `.closed`.
+        guard ok == 0 else { throw IPCError.notRunning }
         writeAll(fd, try IPCCoding.encode(request))
         while let line = readLine(fd) {
-            let msg = try IPCCoding.decode(IPCMessage.self, from: line)
+            guard let msg = try? IPCCoding.decode(IPCMessage.self, from: line) else { throw IPCError.closed }
             if case .progress(let d, let t) = msg { onProgress(d, t) } else { return msg }
         }
         throw IPCError.closed
@@ -81,6 +84,11 @@ private func sockaddrUnix(_ path: String) throws -> sockaddr_un {
         buf[bytes.count] = 0
     }
     return addr
+}
+
+private func noSigPipe(_ fd: Int32) {
+    var on: Int32 = 1
+    setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &on, socklen_t(MemoryLayout<Int32>.size))
 }
 
 private func writeAll(_ fd: Int32, _ data: Data) {

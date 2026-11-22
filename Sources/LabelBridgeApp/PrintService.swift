@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import LabelCore
 
 /// The app's single print service: one Bluetooth scanner and one serial job queue,
@@ -15,7 +15,6 @@ final class PrintService: ObservableObject {
     @Published private(set) var nearby: String?
 
     private var presence = PresenceTracker()
-    private var watchers = 0
     private var presenceTimer: Timer?
 
     private let scanner = PrinterScanner()
@@ -27,19 +26,36 @@ final class PrintService: ObservableObject {
             self?.presence.saw(name, at: Date())
             self?.refreshPresence()
         } }
+        observeWindows()
     }
 
-    /// Windows that show printer status call this on appear/disappear; scanning runs while any is open.
-    func watchPrinter(_ on: Bool) {
-        watchers = max(0, watchers + (on ? 1 : -1))
-        scanner.watching = watchers > 0
+    /// Scans for the printer exactly while one of the app's windows is on screen.
+    private func observeWindows() {
+        let names: [Notification.Name] = [
+            NSWindow.didChangeOcclusionStateNotification, NSWindow.willCloseNotification,
+            NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
+            NSWindow.didBecomeKeyNotification, NSApplication.didHideNotification, NSApplication.didUnhideNotification,
+        ]
+        for name in names {
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                // After willClose the window is still listed; look again on the next turn of the run loop.
+                DispatchQueue.main.async { MainActor.assumeIsolated { PrintService.shared.updateWatching() } }
+            }
+        }
+    }
+
+    func updateWatching() {
+        let windowOpen = !NSApp.isHidden && NSApp.windows.contains { $0.isVisible && $0.canBecomeMain }
+        guard windowOpen != scanner.watching else { return }
+        scanner.watching = windowOpen
         presenceTimer?.invalidate()
         presenceTimer = nil
-        if watchers > 0 {
+        if windowOpen {
             presenceTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { _ in
                 Task { @MainActor in PrintService.shared.refreshPresence() }
             }
         }
+        Log.write("printer scan \(windowOpen ? "on" : "off")")
     }
 
     private func refreshPresence() {

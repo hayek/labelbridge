@@ -21,8 +21,6 @@ struct PrinterStatusView: View {
             indicator(status.kind)
         }
         .animation(.default, value: status)
-        .onAppear { service.watchPrinter(true) }
-        .onDisappear { service.watchPrinter(false) }
     }
 
     private func tint(_ kind: PrinterStatus.Kind) -> Color {

@@ -37,29 +37,47 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
     }
 
     /// Scans for the printer, connects, and returns a ready link.
+    /// On any failure the state goes back to idle and no half-open connection is left behind.
     @MainActor
     func connect(timeout: Duration = .seconds(15)) async throws -> BLEPrinterLink {
         try await waitForPower()
         onState?(.searching)
-        let peripheral = try await OneShot<CBPeripheral>().wait(timeout: timeout, error: PrintError.notFound) { shot in
-            if let known = central.retrieveConnectedPeripherals(withServices: [Self.service]).first {
-                shot.resume(known)
-            } else {
-                discovered = shot
-                central.scanForPeripherals(withServices: nil)
+        var peripheral: CBPeripheral?
+        do {
+            let found = try await OneShot<CBPeripheral>().wait(timeout: timeout, error: PrintError.notFound) { shot in
+                if let known = central.retrieveConnectedPeripherals(withServices: [Self.service]).first {
+                    shot.resume(known)
+                } else {
+                    discovered = shot
+                    central.scanForPeripherals(withServices: nil)
+                }
             }
-        } onTimeout: { self.central.stopScan(); self.resumeWatching() }
-        central.stopScan()
-        onState?(.found(name: peripheral.name ?? "D11"))
-        try await OneShot<Void>().wait(timeout: .seconds(10), error: PrintError.busy) { shot in
-            connected = shot
-            central.connect(peripheral)
-        } onTimeout: { self.central.cancelPeripheralConnection(peripheral) }
-        resumeWatching()
-        let link = BLEPrinterLink(peripheral: peripheral, central: central)
-        links[peripheral.identifier] = link
-        try await link.prepare()
-        return link
+            peripheral = found
+            discovered = nil
+            central.stopScan()
+            onState?(.found(name: found.name ?? "D11"))
+            try await OneShot<Void>().wait(timeout: .seconds(10), error: PrintError.busy) { shot in
+                connected = shot
+                central.connect(found)
+            }
+            resumeWatching()
+            let link = BLEPrinterLink(peripheral: found, central: central)
+            links[found.identifier] = link
+            try await link.prepare()
+            return link
+        } catch {
+            discovered = nil
+            connected = nil
+            if let peripheral {
+                links.removeValue(forKey: peripheral.identifier)
+                central.cancelPeripheralConnection(peripheral)
+            } else {
+                central.stopScan()
+            }
+            resumeWatching()
+            onState?(.idle)
+            throw error
+        }
     }
 
     @MainActor

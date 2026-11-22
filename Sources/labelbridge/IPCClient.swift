@@ -12,8 +12,9 @@ enum AppConnection {
 
     static func send(_ request: IPCRequest, launch: Bool = true, onProgress: (Int, Int) -> Void) throws -> IPCMessage {
         let client = IPCClient()
-        if let msg = try? client.send(request, onProgress: onProgress) { return msg }
-        guard launch else { throw IPCError.closed }
+        do { return try client.send(request, onProgress: onProgress) }
+        catch IPCError.notRunning where launch {}   // only relaunch when the app isn't there; never resend a job it received
+        
         let open = Process()
         open.executableURL = URL(fileURLWithPath: "/usr/bin/open")
         open.arguments = ["-g", "-b", IPCPaths.bundleID]
@@ -22,8 +23,9 @@ enum AppConnection {
         let deadline = Date().addingTimeInterval(10)
         while Date() < deadline {
             Thread.sleep(forTimeInterval: 0.3)
-            if let msg = try? client.send(request, onProgress: onProgress) { return msg }
+            do { return try client.send(request, onProgress: onProgress) }
+            catch IPCError.notRunning { continue }
         }
-        throw IPCError.closed
+        throw IPCError.notRunning
     }
 }
