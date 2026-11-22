@@ -10,7 +10,7 @@ cp Resources/Info.plist "$APP/Contents/"
 cp .build/debug/LabelBridgeApp "$APP/Contents/MacOS/LabelBridge"
 # The CLI lives in Helpers: "labelbridge" and "LabelBridge" are the same name on case-insensitive volumes.
 cp .build/debug/labelbridge "$APP/Contents/Helpers/labelbridge"
-[[ -d Resources/Bundle ]] && cp -R Resources/Bundle/ "$APP/Contents/Resources/"
+cp -R Resources/Bundle/ "$APP/Contents/Resources/"
 codesign --force -s "${SIGN_ID:--}" "$APP/Contents/Helpers/labelbridge"
 codesign --force -s "${SIGN_ID:--}" "$APP"
 echo "$APP"
