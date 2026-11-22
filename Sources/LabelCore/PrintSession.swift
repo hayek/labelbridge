@@ -11,8 +11,14 @@ public final class PrintSession: @unchecked Sendable {
     private let inbox = Inbox()
     private var pump: Task<Void, Never>?
 
-    public init(link: PrinterLink, replyTimeout: Duration = .seconds(2), statusTimeout: Duration = .seconds(20),
-                rowInterval: Duration = .milliseconds(10), pollInterval: Duration = .milliseconds(300)) {
+    private let pageTimeout: Duration
+    private let log: (@Sendable (String) -> Void)?
+
+    public init(link: PrinterLink, replyTimeout: Duration = .seconds(2), pageTimeout: Duration = .seconds(10),
+                statusTimeout: Duration = .seconds(20), rowInterval: Duration = .milliseconds(10),
+                pollInterval: Duration = .milliseconds(300), log: (@Sendable (String) -> Void)? = nil) {
+        self.pageTimeout = pageTimeout
+        self.log = log
         self.link = link
         self.replyTimeout = replyTimeout
         self.statusTimeout = statusTimeout
@@ -21,7 +27,9 @@ public final class PrintSession: @unchecked Sendable {
     }
 
     /// Prints `pages` × `settings.copies` labels and returns how many printed.
-    /// `progress(printed, total)` is called after each label finishes.
+    /// Like niimbluelib's D110M v4 task, all pages are sent back to back (the printer paces us by
+    /// answering setPageSize/pageEnd when it can take more), then the status counter is polled
+    /// until every label is out. `progress(printed, total)` is called as the counter rises.
     public func run(pages: [EncodedPage], settings: PrintSettings, progress: (Int, Int) -> Void) async throws -> Int {
         let replies = link.replies, inbox = self.inbox
         pump = Task { for await p in replies { await inbox.put(p) } }
@@ -38,25 +46,35 @@ public final class PrintSession: @unchecked Sendable {
             throw PrintError.printer(code: r.code, printed: 0)
         }
 
-        var printed = 0
+        var printed = 0          // labels the printer's counter has confirmed
+        func note(_ status: Packet?) throws {
+            guard let status else { return }
+            if status.cmd == PrinterReported.packet { throw PrinterReported(code: Int(status.data.first ?? 0)) }
+            guard status.data.count >= 2 else { return }
+            // The 10-byte status form carries an error byte at offset 6 (niimbluelib parsePrintStatusResponse).
+            if status.data.count == 10, status.data[6] != 0 { throw PrinterReported(code: Int(status.data[6])) }
+            let counter = min(Int(status.data[0]) << 8 | Int(status.data[1]), total)
+            if counter > printed { printed = counter; progress(printed, total) }
+        }
         do {
-            for page in pages {
-                try await link.send(Packet(.printStatus).bytes())       // sent without waiting, like the official app
+            for (i, page) in pages.enumerated() {
+                try note(await inbox.latest(0xB3))                   // answer to the previous one-way status
+                try await send(Packet(.printStatus), note: "status (one-way)")
                 // setPageSize13b: rows, cols, copies, cut height, cut type, 0, send-all, part height
                 let size = Packet.u16(page.rows) + Packet.u16(page.cols) + Packet.u16(settings.copies) + Packet.u16(0) + [0, 0, 0] + Packet.u16(0)
-                try await require(Packet(.setPageSize, size), 0x14)
+                try await requireOnce(Packet(.setPageSize, size), 0x14, what: "page \(i + 1) size")
                 for row in page.packets {
                     try await link.send(row.bytes())
                     if rowInterval > .zero { try await Task.sleep(for: rowInterval) }
                 }
-                try await require(Packet(.pageEnd), 0xE4, tries: 5)
-                try await waitForPageCounter(printed + settings.copies)
-                printed += settings.copies
-                progress(printed, total)
+                try await requireOnce(Packet(.pageEnd), 0xE4, what: "page \(i + 1) end")
             }
+            try await waitUntilPrinted(total, note: note)
         } catch let r as PrinterReported {
+            await closeJob()
             throw PrintError.printer(code: r.code, printed: printed)
         } catch {
+            await closeJob()
             throw PrintError.failedMidJob(printed: printed)
         }
         _ = try? await request(Packet(.printEnd), expect: 0xF4, tries: 3)
@@ -64,33 +82,69 @@ public final class PrintSession: @unchecked Sendable {
         return printed
     }
 
-    private func waitForPageCounter(_ target: Int) async throws {
-        let deadline = ContinuousClock.now + statusTimeout
-        await inbox.discard(0xB3)    // drop the reply to the un-awaited printStatus
-        while ContinuousClock.now < deadline {
-            if let s = try await request(Packet(.printStatus), expect: 0xB3, tries: 1), s.data.count >= 2 {
-                // The 10-byte status form carries an error byte at offset 6 (niimbluelib parsePrintStatusResponse).
-                if s.data.count >= 10, s.data[6] != 0 { throw PrinterReported(code: Int(s.data[6])) }
-                if Int(s.data[0]) << 8 | Int(s.data[1]) >= target { return }
+    /// Polls the status until `total` labels are out. Fails only after `statusTimeout` with no change
+    /// at all (counter or progress bytes), so long jobs with many copies never time out while printing.
+    private func waitUntilPrinted(_ total: Int, note: (Packet?) throws -> Void) async throws {
+        var lastChange = ContinuousClock.now
+        var lastData: [UInt8] = []
+        while true {
+            let status = try await request(Packet(.printStatus), expect: 0xB3, tries: 1, quiet: true)
+            try note(status)
+            if let status {
+                if status.data.count >= 2, Int(status.data[0]) << 8 | Int(status.data[1]) >= total { return }
+                if status.data != lastData { lastData = status.data; lastChange = .now }
+            }
+            if ContinuousClock.now - lastChange > statusTimeout {
+                log?("no progress for \(statusTimeout); giving up")
+                throw PrintError.timeout
             }
             try await Task.sleep(for: pollInterval)
         }
-        throw PrintError.timeout
+    }
+
+    /// Ends a failed job on the printer so it isn't left waiting for pages (best effort, no reply needed).
+    private func closeJob() async {
+        log?("closing the failed job")
+        try? await link.send(Packet(.printEnd).bytes())
+        try? await Task.sleep(for: .milliseconds(200))
     }
 
     private func require(_ packet: Packet, _ reply: UInt8, tries: Int = 3) async throws {
         guard try await request(packet, expect: reply, tries: tries) != nil else { throw PrintError.timeout }
     }
 
-    private func request(_ packet: Packet, expect reply: UInt8, tries: Int) async throws -> Packet? {
-        for _ in 0..<tries {
-            try await link.send(packet.bytes())
+    /// Sends once and waits up to `pageTimeout`: the printer answers page commands when it has room,
+    /// and resending would give it a duplicate page command (niimbluelib uses one try, 10 s).
+    private func requireOnce(_ packet: Packet, _ reply: UInt8, what: String) async throws {
+        await inbox.discard(reply)
+        try await send(packet, note: what)
+        guard let p = await inbox.take(reply, timeout: pageTimeout) else {
+            log?("no answer to \(what) within \(pageTimeout)")
+            throw PrintError.timeout
+        }
+        if p.cmd == PrinterReported.packet { throw PrinterReported(code: Int(p.data.first ?? 0)) }
+    }
+
+    private func request(_ packet: Packet, expect reply: UInt8, tries: Int, quiet: Bool = false) async throws -> Packet? {
+        await inbox.discard(reply)
+        for attempt in 1...tries {
+            try await send(packet, note: quiet ? nil : (attempt > 1 ? "try \(attempt)" : ""))
             if let p = await inbox.take(reply, timeout: replyTimeout) {
                 if p.cmd == PrinterReported.packet { throw PrinterReported(code: Int(p.data.first ?? 0)) }
                 return p
             }
         }
+        if !quiet { log?(String(format: "no answer to %02X after %d tries", packet.cmd, tries)) }
         return nil
+    }
+
+    /// Sends a command, logging it unless `note` is nil (rows and status polls aren't logged).
+    private func send(_ packet: Packet, note: String?) async throws {
+        if let note {
+            let data = packet.data.map { String(format: "%02x", $0) }.joined(separator: " ")
+            log?(String(format: "→ printer %02X ", packet.cmd) + data + (note.isEmpty ? "" : "  (\(note))"))
+        }
+        try await link.send(packet.bytes())
     }
 }
 
@@ -119,6 +173,14 @@ actor Inbox {
     }
 
     func discard(_ cmd: UInt8) { packets.removeAll { $0.cmd == cmd } }
+
+    /// Removes every queued packet with `cmd` and returns the newest one (no waiting).
+    func latest(_ cmd: UInt8) -> Packet? {
+        if let e = printerError { return e }
+        let last = packets.last { $0.cmd == cmd }
+        discard(cmd)
+        return last
+    }
 
     func take(_ cmd: UInt8, timeout: Duration) async -> Packet? {
         if let e = printerError { return e }

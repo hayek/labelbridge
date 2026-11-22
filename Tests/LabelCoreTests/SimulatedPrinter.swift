@@ -18,6 +18,16 @@ final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
     /// When set, status replies are the 10-byte form carrying this error byte.
     var statusErrorCode: UInt8?
     private var errored = false
+    /// When set, each label takes this long to print after its pageEnd (the counter rises over time).
+    var labelDuration: Duration?
+    /// Delay before answering setPageSize (a busy printer answers late).
+    var pageSizeReplyDelay: Duration?
+    /// When true, healthy status replies use the 10-byte form with a zero error byte.
+    var tenByteStatus = false
+    private var queuedLabels = 0
+    private var printing: Task<Void, Never>?
+    /// Labels printed so far, as the printer's counter reports it.
+    var counter: Int { pageCounter }
     var onSend: ((Packet) -> Void)?
 
     init() {
@@ -48,12 +58,31 @@ final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
             case Cmd.connect.rawValue: if answerConnect { reply(0xC2, [3]) }
             case Cmd.setPageSize.rawValue:
                 copies = Int(p.data[4]) << 8 | Int(p.data[5])
-                reply(0x14, [1, 0])
+                if let d = pageSizeReplyDelay {
+                    Task { try? await Task.sleep(for: d); self.reply(0x14, [1, 0]) }
+                } else {
+                    reply(0x14, [1, 0])
+                }
             case Cmd.pageEnd.rawValue:
                 pageEnds += 1
-                pageCounter += copies
+                if let d = labelDuration {
+                    queuedLabels += copies
+                    if printing == nil {
+                        printing = Task {
+                            while self.queuedLabels > 0 {
+                                try? await Task.sleep(for: d)
+                                self.queuedLabels -= 1
+                                self.pageCounter += 1
+                            }
+                            self.printing = nil
+                        }
+                    }
+                } else {
+                    pageCounter += copies
+                }
                 reply(0xE4, [1])
-            case Cmd.printStatus.rawValue: reply(0xB3, Packet.u16(pageCounter) + [100, 100, 0, 0, 0, 0])
+            case Cmd.printStatus.rawValue:
+                reply(0xB3, Packet.u16(pageCounter) + (tenByteStatus ? [100, 100, 0, 0, 0, 0, 0, 0] : [100, 100, 0, 0, 0, 0]))
             case Cmd.bitmapRow.rawValue, Cmd.emptyRow.rawValue, Cmd.heartbeat.rawValue: break
             default: if let r = Packet.expectedReply(for: Cmd(rawValue: p.cmd)!) { reply(r, [1]) }
             }

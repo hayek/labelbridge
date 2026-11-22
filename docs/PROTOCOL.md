@@ -44,19 +44,34 @@ All u16 values are big-endian, except the black-pixel count in bitmap rows, whic
 - On 15×50 mm labels the head covers the middle ~12 mm of the 15 mm height. Leaving **2 mm** clear at each end of the
   label prevents clipping at the leading edge.
 
-## Print sequence (verified)
+## Print sequence
+
+Follows niimbluelib's `D110MV4PrintTask`:
 
 ```
 connect → label type 1 → density → print start (total = labels × copies)
-for each label:
+for each label, back to back:
     print status (not awaited) → page size (rows, 144, copies) → rows (~10 ms apart) → page end
-    poll print status every 300 ms until the page counter reaches the running total
+    (page size and page end are sent once and may be answered late, up to 10 s: the printer paces the sender)
+poll print status every 300 ms until the counter reaches the total
+    (fail only after 20 s with no change at all)
 print end → heartbeat (not awaited)
+on failure: print end (not awaited), so the printer isn't left mid-job
 ```
 
-Hardware results:
+The printer reports problems two ways, and LabelBridge stops at once with the reason:
+- a `0xDB` packet whose first byte is an error code (`PrinterErrorCode` in niimbluelib: 1 lid open,
+  2 no labels, 8 label feed problem, …);
+- the 10-byte print-status reply, whose byte 6 is an error code. The D11_H answers with the 8-byte form.
 
-- **3 labels in one session:** each label confirmed about 4 s apart; all three printed correctly.
+During rows the printer also sends `0xD3` (`PrinterCheckLine`) with the number of rows received so far
+(199, 399, …); it needs no reply.
+
+Hardware history:
+
+- **3 labels in one session** printed correctly several times with the earlier "wait for each label" flow,
+  but 9- and 8-label jobs then stopped after label 1 with a red LED. The back-to-back flow above is the
+  reference flow, which never leaves the printer idle mid-job.
 - **Copies:** `copies = 2` in page size with total = 2 prints two identical labels; the counter jumps by 2.
 - **Busy:** while the NIIMBOT phone app is connected, the printer stops advertising, so a Mac scan doesn't find it.
   LabelBridge reports "printer not found" after 15 s.

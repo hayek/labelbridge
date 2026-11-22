@@ -22,8 +22,8 @@ final class PrinterScanner: NSObject, CBCentralManagerDelegate, @unchecked Senda
     /// When true, keep scanning so the UI can show whether the printer is on.
     var watching = false { didSet { resumeWatching() } }
 
-    /// Watching scans only while no printer connection is open: scanning during a print job
-    /// competes for the radio and made the D11 stop mid-batch (hardware-verified).
+    /// Watching scans only while no printer connection is open, so scanning never competes with a
+    /// print job for the radio (one failed 3-label job with a window open; 3/3 after this change).
     private func resumeWatching() {
         guard central.state == .poweredOn, links.isEmpty, connected == nil else { return }
         if watching {

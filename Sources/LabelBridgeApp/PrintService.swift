@@ -18,7 +18,8 @@ final class PrintService: ObservableObject {
     private var presenceTimer: Timer?
 
     private let scanner = PrinterScanner()
-    private lazy var queue = JobQueue(makeLink: { [scanner] in try await scanner.connect() })
+    private lazy var queue = JobQueue(makeLink: { [scanner] in try await scanner.connect() },
+                                      makeSession: { PrintSession(link: $0, log: { Log.write($0) }) })
 
     private init() {
         scanner.onState = { [weak self] s in Task { @MainActor in self?.state = s } }

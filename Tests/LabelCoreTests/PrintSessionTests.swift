@@ -7,8 +7,8 @@ final class PrintSessionTests: XCTestCase {
     }
 
     private func session(_ link: SimulatedPrinter) -> PrintSession {
-        PrintSession(link: link, replyTimeout: .milliseconds(100), statusTimeout: .milliseconds(600),
-                     rowInterval: .zero, pollInterval: .milliseconds(10))
+        PrintSession(link: link, replyTimeout: .milliseconds(100), pageTimeout: .milliseconds(300),
+                     statusTimeout: .milliseconds(600), rowInterval: .zero, pollInterval: .milliseconds(10))
     }
 
     private func setup(_ c: [UInt8]) -> [UInt8] { c.filter { $0 != Cmd.bitmapRow.rawValue && $0 != Cmd.emptyRow.rawValue } }
@@ -129,4 +129,78 @@ final class PrinterErrorTests: XCTestCase {
         XCTAssertTrue(PrinterProblem.describe(0x99).contains("153"))
         XCTAssertTrue(PrinterProblem.describe(0x01).lowercased().contains("lid"))
     }
+}
+
+/// The flow follows niimbluelib's D110M v4 task: all pages back to back, then one status wait.
+final class PrintFlowTests: XCTestCase {
+    private func page() -> EncodedPage {
+        RowEncoder.encode(Bitmap(width: 4, height: 142, pixels: (0..<(4 * 142)).map { $0 % 3 == 0 }))
+    }
+    private func session(_ link: SimulatedPrinter, status: Duration = .milliseconds(600)) -> PrintSession {
+        PrintSession(link: link, replyTimeout: .milliseconds(100), pageTimeout: .seconds(1), statusTimeout: status,
+                     rowInterval: .zero, pollInterval: .milliseconds(10))
+    }
+
+    func testPagesAreSentBackToBackWithoutWaitingForEachLabel() async throws {
+        let printer = SimulatedPrinter()
+        printer.labelDuration = .milliseconds(150)
+        var counterAtLastPageEnd = -1
+        var pageEnds = 0
+        printer.onSend = { p in
+            if p.cmd == Cmd.pageEnd.rawValue { pageEnds += 1; if pageEnds == 3 { counterAtLastPageEnd = printer.counter } }
+        }
+        let printed = try await session(printer).run(pages: [page(), page(), page()], settings: PrintSettings(density: 3, copies: 1)) { _, _ in }
+        XCTAssertEqual(printed, 3)
+        XCTAssertLessThan(counterAtLastPageEnd, 2, "page 3 should be sent before label 2 finishes printing")
+    }
+
+    func testManyCopiesOnASlowPrinterDoNotTimeOut() async throws {
+        let printer = SimulatedPrinter()
+        printer.labelDuration = .milliseconds(150)     // 6 labels ≈ 0.9 s, longer than the 0.4 s status timeout
+        var progress: [Int] = []
+        let printed = try await session(printer, status: .milliseconds(400))
+            .run(pages: [page()], settings: PrintSettings(density: 3, copies: 6)) { done, _ in progress.append(done) }
+        XCTAssertEqual(printed, 6)
+        XCTAssertEqual(progress.last, 6)
+        XCTAssertGreaterThan(progress.count, 1, "progress is reported as labels finish")
+    }
+
+    func testSlowPageSizeAnswerIsNotResent() async throws {
+        let printer = SimulatedPrinter()
+        printer.pageSizeReplyDelay = .milliseconds(300)   // later than the 100 ms reply timeout, within the page timeout
+        _ = try await session(printer).run(pages: [page(), page()], settings: PrintSettings(density: 3, copies: 1)) { _, _ in }
+        XCTAssertEqual(printer.commands.filter { $0 == Cmd.setPageSize.rawValue }.count, 2)
+    }
+
+    func testAFailedJobIsClosedOnThePrinter() async {
+        let printer = SimulatedPrinter()
+        printer.errorAfterPages = 1
+        _ = try? await session(printer).run(pages: [page(), page()], settings: PrintSettings(density: 3, copies: 1)) { _, _ in }
+        XCTAssertEqual(printer.commands.last, Cmd.printEnd.rawValue)
+    }
+
+    func testHealthyTenByteStatusIsNotAnError() async throws {
+        let printer = SimulatedPrinter()
+        printer.tenByteStatus = true
+        let printed = try await session(printer).run(pages: [page()], settings: PrintSettings(density: 3, copies: 1)) { _, _ in }
+        XCTAssertEqual(printed, 1)
+    }
+
+    func testSentCommandsAreLogged() async throws {
+        let printer = SimulatedPrinter()
+        let lines = LogLines()
+        let s = PrintSession(link: printer, replyTimeout: .milliseconds(100), pageTimeout: .seconds(1), statusTimeout: .milliseconds(600),
+                             rowInterval: .zero, pollInterval: .milliseconds(10), log: { lines.add($0) })
+        _ = try await s.run(pages: [page()], settings: PrintSettings(density: 3, copies: 1)) { _, _ in }
+        XCTAssertTrue(lines.all.contains { $0.contains("→ printer 13") }, lines.all.joined(separator: "\n"))
+        XCTAssertTrue(lines.all.contains { $0.contains("→ printer E3") })
+        XCTAssertFalse(lines.all.contains { $0.contains("→ printer 85") }, "rows are not logged")
+    }
+}
+
+final class LogLines: @unchecked Sendable {
+    private let lock = NSLock()
+    private var lines: [String] = []
+    func add(_ s: String) { lock.lock(); lines.append(s); lock.unlock() }
+    var all: [String] { lock.lock(); defer { lock.unlock() }; return lines }
 }
