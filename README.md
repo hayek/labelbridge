@@ -1,6 +1,6 @@
 # LabelBridge
 
-![LabelBridge: print labels to a NIIMBOT D11 from your Mac over Bluetooth](docs/banner.png)
+![LabelBridge: print labels to a NIIMBOT D11 from your Mac over Bluetooth](docs/banner.jpg)
 
 Print labels from your Mac to a **NIIMBOT D11** label printer **over Bluetooth**. NIIMBOT printers normally work only with the NIIMBOT phone app.
 
