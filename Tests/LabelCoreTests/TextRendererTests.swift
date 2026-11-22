@@ -32,6 +32,13 @@ final class TextRendererTests: XCTestCase {
         XCTAssertEqual(r.skipped, 2)
     }
 
+    func testEmptyAndTrailingLinesAreNotCountedAsSkipped() {
+        XCTAssertEqual(Batch.items(from: "").skipped, 0)
+        let r = Batch.items(from: "Dana\nYossi\n\n")
+        XCTAssertEqual(r.items, ["Dana", "Yossi"])
+        XCTAssertEqual(r.skipped, 0)
+    }
+
     func testEscapedNewline() {
         XCTAssertEqual(Batch.items(from: "Dana\\nCohen").items, ["Dana\nCohen"])
     }

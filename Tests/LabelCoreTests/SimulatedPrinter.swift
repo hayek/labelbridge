@@ -12,6 +12,7 @@ final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
     private var pageEnds = 0
     var answerConnect = true
     var stopAfterPages: Int?
+    var onSend: ((Packet) -> Void)?
 
     init() {
         var c: AsyncStream<Packet>.Continuation!
@@ -25,6 +26,7 @@ final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
         let frame = bytes.first == 0x03 ? Array(bytes.dropFirst()) : bytes
         for p in parser.feed(frame) {
             sent.append(p)
+            onSend?(p)
             if let stop = stopAfterPages, pageEnds >= stop { continue }   // printer went silent
             switch p.cmd {
             case Cmd.connect.rawValue: if answerConnect { reply(0xC2, [3]) }

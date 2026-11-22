@@ -9,4 +9,4 @@ if let i = arguments.firstIndex(of: "--debug-print"), arguments.count > i + 1 {
     Task { @MainActor in exit(await DebugPrint.run(text: text, count: count, copies: copies)) }
     RunLoop.main.run()
 }
-// The window app is added in Task 6.
+LabelBridgeApp.main()
