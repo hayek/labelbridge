@@ -10,6 +10,9 @@ struct LabelBridgeApp: App {
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
             CommandGroup(replacing: .help) { HelpMenuItems() }
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") { Task { await Updater.check(userInitiated: true) } }
+            }
         }
         Window("LabelBridge Help", id: "help") {
             HelpView()
@@ -33,6 +36,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.async { SetupCoordinator.shared.present(repair: false) }
         }
     }
+
+    func applicationDidBecomeActive(_ notification: Notification) { Updater.checkIfDue() }
 
     /// Clicking the Dock icon (or opening the app again) brings the main window back.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

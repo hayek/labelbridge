@@ -21,6 +21,8 @@ Print labels from your Mac to a **NIIMBOT D11** label printer **over Bluetooth**
 
 Requires macOS 13 or later, on Apple Silicon or Intel. LabelBridge is signed and notarized by Apple.
 
+**Updates:** choose LabelBridge › Check for Updates…. LabelBridge also checks this repo's GitHub releases once a day and tells you when a new version is out. Nothing else is sent. You can turn this off in LabelBridge › Settings.
+
 ## Print from the window
 
 Type or paste labels on the left, one per line. The middle shows a preview of each label at its real proportions. On the right you choose:

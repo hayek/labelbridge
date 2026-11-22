@@ -28,5 +28,17 @@ enum Settings {
         get { d.object(forKey: "openAtLogin") as? Bool ?? false }
         set { d.set(newValue, forKey: "openAtLogin") }
     }
+    static var checkForUpdates: Bool {
+        get { d.object(forKey: "checkForUpdates") as? Bool ?? true }
+        set { d.set(newValue, forKey: "checkForUpdates") }
+    }
+    static var lastUpdateCheck: Date? {
+        get { d.object(forKey: "lastUpdateCheck") as? Date }
+        set { d.set(newValue, forKey: "lastUpdateCheck") }
+    }
+    static var skippedVersion: String? {
+        get { d.string(forKey: "skippedVersion") }
+        set { d.set(newValue, forKey: "skippedVersion") }
+    }
     static var style: TextStyle { TextStyle(fontName: fontName, bold: bold, alignment: alignment) }
 }
