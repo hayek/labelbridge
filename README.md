@@ -6,7 +6,7 @@ Print labels from your Mac to a **NIIMBOT D11** label printer **over Bluetooth**
 
 - **Batch labels:** paste a list, such as names, and get one label per line. Each label's text is sized to fill the label.
 - **Any language:** Hebrew, Arabic and other right-to-left scripts, mixed-direction text, CJK and emoji.
-- **Command line for AI agents and scripts:** `labelbridge print "Dana" "Yossi"`.
+- **Command line for AI agents and scripts:** `labelbridge print "Oliver" "Emily"`.
 - **Any app's Print dialog:** a printer called **NIIMBOT D11 (Bluetooth)** with label paper sizes.
 
 ## Install
@@ -38,14 +38,14 @@ Then click **Print** (⌘P). To put a line break inside a label, type `\n`.
 ## Print from the command line
 
 ```sh
-labelbridge print "Dana" "Yossi" "محمد"           # one label per argument
+labelbridge print "Oliver" "Emily" "محمد"         # one label per argument
 labelbridge print --file names.txt                # one label per line
 cat names.txt | labelbridge print -               # from stdin
 labelbridge print "Spices\nTop shelf"             # two lines on one label
-labelbridge print --copies 2 --density 4 --bold --font "Arial Hebrew" "Dana"
-labelbridge print --json "Dana"                   # {"ok":true,"printed":1,"total":1,...}
+labelbridge print --copies 2 --density 4 --bold --font "Arial Hebrew" "Oliver"
+labelbridge print --json "Oliver"                 # {"ok":true,"printed":1,"total":1,...}
 labelbridge print --dry-run --file names.txt      # render only, don't print
-labelbridge preview "Dana" --out /tmp/labels      # write PNGs, no printer needed
+labelbridge preview "Oliver" --out /tmp/labels    # write PNGs, no printer needed
 labelbridge status                                # app and printer status
 labelbridge sizes                                 # built-in label sizes
 ```
