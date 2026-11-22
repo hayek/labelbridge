@@ -25,6 +25,8 @@ Requires macOS 13 or later, on Apple Silicon or Intel. LabelBridge is signed and
 
 ## Print from the window
 
+<p align="center"><img src="docs/screenshot.png" width="760" alt="The LabelBridge window: two labels typed on the left, their previews in the middle, and the size, copies, darkness and text options on the right"></p>
+
 Type or paste labels on the left, one per line. The middle shows a preview of each label at its real proportions. On the right you choose:
 - the label size,
 - copies,
