@@ -8,8 +8,25 @@ struct LabelBridgeCLI: ParsableCommand {
         commandName: "labelbridge",
         abstract: "Print labels to a NIIMBOT Bluetooth label printer through LabelBridge.app.",
         discussion: """
-        One label per argument (or per line with --file / stdin). Type \\n inside a label for a line break.
-        Exit codes: 0 printed, 2 bad input, 3 printer not found or busy, 4 printing failed, 5 LabelBridge.app not available.
+        One label per argument, or one per line with --file or stdin (-). Type \\n inside a label for a line break. \
+        Any language works, including Hebrew and Arabic. Defaults (size, darkness, font, alignment) come from the app's window.
+
+        EXAMPLES:
+          labelbridge print "Dana" "Yossi" "محمد"
+          labelbridge print --file names.txt --copies 2
+          cat names.txt | labelbridge print -
+          labelbridge print --json "Spices\\nTop shelf"
+          labelbridge preview "Dana" --out /tmp/labels
+
+        FOR AI AGENTS:
+          To print labels, run `labelbridge print --json` with one label per argument.
+
+        EXIT CODES:
+          0  printed
+          2  bad input
+          3  printer not found or busy (turn it on; disconnect the NIIMBOT phone app)
+          4  printing failed (the JSON says how many labels printed)
+          5  LabelBridge.app not available
         """,
         subcommands: [Print.self, Preview.self, Status.self, Sizes.self],
         defaultSubcommand: Print.self)
@@ -19,10 +36,10 @@ struct LabelBridgeCLI: ParsableCommand {
 struct LabelOptions: ParsableArguments {
     @Argument(help: "Label texts. Use - to read lines from stdin.") var items: [String] = []
     @Option(name: .shortAndLong, help: "Read labels from a file, one per line.") var file: String?
-    @Option(help: "Label size in mm, e.g. 50x15.") var size: String?
-    @Option(help: "Darkness 1–5.") var density: Int?
+    @Option(help: "Label size in mm, width x length, e.g. 15x50 (see `labelbridge sizes`).") var size: String?
+    @Option(help: "Darkness 1–5 (default 3).") var density: Int?
     @Option(help: "Copies of each label.") var copies: Int = 1
-    @Option(help: "center, leading or trailing.") var align: String?
+    @Option(help: "center, leading or trailing. Leading is the start of the line: the right side for Hebrew and Arabic.") var align: String?
     @Option(help: "Font family name, e.g. \"Arial Hebrew\".") var font: String?
     @Flag(help: "Bold text.") var bold = false
 
@@ -58,7 +75,13 @@ struct LabelOptions: ParsableArguments {
 }
 
 struct Print: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Print labels (default command).")
+    static let configuration = CommandConfiguration(
+        abstract: "Print labels (default command).",
+        discussion: """
+        Prints one label per item and waits until they're done. Progress goes to stderr. \
+        With --json, prints {"ok", "printed", "total", "skipped", "warnings", "error"} to stdout. \
+        Blank lines are skipped. Text that doesn't fit is shortened with "…" and reported as a warning.
+        """)
     @OptionGroup var options: LabelOptions
     @Flag(help: "Render only; don't print.") var dryRun = false
     @Flag(help: "Print the result as JSON.") var json = false

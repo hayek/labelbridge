@@ -34,7 +34,7 @@ Then click **Print** (⌘P). To put a line break inside a label, type `\n`.
 ## Print from the command line
 
 ```sh
-labelbridge print "Dana" "יוסי" "محمد"            # one label per argument
+labelbridge print "Dana" "Yossi" "محمد"           # one label per argument
 labelbridge print --file names.txt                # one label per line
 cat names.txt | labelbridge print -               # from stdin
 labelbridge print "Spices\nTop shelf"             # two lines on one label
@@ -66,6 +66,113 @@ labelbridge sizes                                 # built-in label sizes
 
 The command talks to LabelBridge.app, which owns the Bluetooth connection. If the app isn't running, the command opens it in the background.
 
+<details>
+<summary><b>Full command reference</b> (<code>labelbridge --help</code>)</summary>
+
+```text
+OVERVIEW: Print labels to a NIIMBOT Bluetooth label printer through
+LabelBridge.app.
+
+One label per argument, or one per line with --file or stdin (-). Type \n
+inside a label for a line break. Any language works, including Hebrew and
+Arabic. Defaults (size, darkness, font, alignment) come from the app's window.
+
+EXAMPLES:
+  labelbridge print "Dana" "Yossi" "محمد"
+  labelbridge print --file names.txt --copies 2
+  cat names.txt | labelbridge print -
+  labelbridge print --json "Spices\nTop shelf"
+  labelbridge preview "Dana" --out /tmp/labels
+
+FOR AI AGENTS:
+  To print labels, run `labelbridge print --json` with one label per argument.
+
+EXIT CODES:
+  0  printed
+  2  bad input
+  3  printer not found or busy (turn it on; disconnect the NIIMBOT phone app)
+  4  printing failed (the JSON says how many labels printed)
+  5  LabelBridge.app not available
+
+USAGE: labelbridge <subcommand>
+
+OPTIONS:
+  -h, --help              Show help information.
+
+SUBCOMMANDS:
+  print (default)         Print labels (default command).
+  preview                 Write label images (PNG) without printing.
+  status                  Show whether LabelBridge.app and the printer are
+                          available.
+  sizes                   List built-in label sizes (width x length, mm).
+
+  See 'labelbridge help <subcommand>' for detailed help.
+
+────────
+
+OVERVIEW: Print labels (default command).
+
+Prints one label per item and waits until they're done. Progress goes to
+stderr. With --json, prints {"ok", "printed", "total", "skipped", "warnings",
+"error"} to stdout. Blank lines are skipped. Text that doesn't fit is shortened
+with "…" and reported as a warning.
+
+USAGE: labelbridge print [<items> ...] [--file <file>] [--size <size>] [--density <density>] [--copies <copies>] [--align <align>] [--font <font>] [--bold] [--dry-run] [--json]
+
+ARGUMENTS:
+  <items>                 Label texts. Use - to read lines from stdin.
+
+OPTIONS:
+  -f, --file <file>       Read labels from a file, one per line.
+  --size <size>           Label size in mm, width x length, e.g. 15x50 (see
+                          `labelbridge sizes`).
+  --density <density>     Darkness 1–5 (default 3).
+  --copies <copies>       Copies of each label. (default: 1)
+  --align <align>         center, leading or trailing. Leading is the start of
+                          the line: the right side for Hebrew and Arabic.
+  --font <font>           Font family name, e.g. "Arial Hebrew".
+  --bold                  Bold text.
+  --dry-run               Render only; don't print.
+  --json                  Print the result as JSON.
+  -h, --help              Show help information.
+
+
+────────
+
+OVERVIEW: Write label images (PNG) without printing.
+
+USAGE: labelbridge preview [<items> ...] [--file <file>] [--size <size>] [--density <density>] [--copies <copies>] [--align <align>] [--font <font>] [--bold] [--out <out>]
+
+ARGUMENTS:
+  <items>                 Label texts. Use - to read lines from stdin.
+
+OPTIONS:
+  -f, --file <file>       Read labels from a file, one per line.
+  --size <size>           Label size in mm, width x length, e.g. 15x50 (see
+                          `labelbridge sizes`).
+  --density <density>     Darkness 1–5 (default 3).
+  --copies <copies>       Copies of each label. (default: 1)
+  --align <align>         center, leading or trailing. Leading is the start of
+                          the line: the right side for Hebrew and Arabic.
+  --font <font>           Font family name, e.g. "Arial Hebrew".
+  --bold                  Bold text.
+  --out <out>             Output directory. (default: .)
+  -h, --help              Show help information.
+
+
+────────
+
+OVERVIEW: Show whether LabelBridge.app and the printer are available.
+
+USAGE: labelbridge status [--json]
+
+OPTIONS:
+  --json                  Print as JSON.
+  -h, --help              Show help information.
+```
+
+</details>
+
 ### Instructions for AI agents
 
 Add this to your agent's instructions (for example `CLAUDE.md`):
@@ -91,6 +198,7 @@ Choose **NIIMBOT D11 (Bluetooth)** in the Print dialog and pick a label size und
 - **Bluetooth access needed:** allow LabelBridge in System Settings › Privacy & Security › Bluetooth.
 - **Text looks too light:** raise the darkness.
 - **Logs:** `~/Library/Logs/LabelBridge.log`. Open them from Help › Open Log.
+- **More help:** Help › LabelBridge Help (⌘?) in the app covers printing, the command line, AI agents and troubleshooting.
 - **Repair or uninstall:** LabelBridge › Settings.
 
 ## Supported printers

@@ -9,10 +9,12 @@ struct LabelBridgeApp: App {
         }
         .windowToolbarStyle(.unified(showsTitle: true))
         .commands {
-            CommandGroup(after: .help) {
-                Button("Open Log") { NSWorkspace.shared.open(Log.url) }
-            }
+            CommandGroup(replacing: .help) { HelpMenuItems() }
         }
+        Window("LabelBridge Help", id: "help") {
+            HelpView()
+        }
+        .windowToolbarStyle(.unified(showsTitle: true))
         SwiftUI.Settings {
             SettingsView()
         }
@@ -52,4 +54,14 @@ enum AppServices {
 @MainActor
 enum MainWindowOpener {
     static var open: (() -> Void)?
+}
+
+/// Help menu: opens the Help window (⌘?) and the log.
+struct HelpMenuItems: View {
+    @Environment(\.openWindow) private var openWindow
+    var body: some View {
+        Button("LabelBridge Help") { openWindow(id: "help") }.keyboardShortcut("?", modifiers: .command)
+        Divider()
+        Button("Open Log") { NSWorkspace.shared.open(Log.url) }
+    }
 }
