@@ -6,44 +6,100 @@ struct SetupView: View {
     var onClose: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Set up LabelBridge").font(.title2.bold())
-            Text("Print to your NIIMBOT D11 over Bluetooth from this window, the labelbridge command and any app's Print dialog.")
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            VStack(alignment: .leading, spacing: 8) {
-                row("Applications folder", flow.applications)
-                row("Bluetooth access", flow.bluetooth)
-                row("Printer “NIIMBOT D11 (Bluetooth)”", flow.printerQueue)
-                row("labelbridge command", flow.cli)
-                row("Open at login", flow.login)
-                row("Test label", flow.testLabel)
+        VStack(spacing: 0) {
+            VStack(spacing: 6) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable().frame(width: 72, height: 72)
+                Text("Welcome to LabelBridge").font(.title2.weight(.semibold))
+                Text("Print labels to your NIIMBOT D11 over Bluetooth.")
+                    .foregroundStyle(.secondary)
             }
-            Text("Turn the D11 on and disconnect the NIIMBOT phone app before printing.").font(.caption).foregroundStyle(.secondary)
+            .padding(.top, 8)
+            .padding(.bottom, 20)
+
+            VStack(spacing: 0) {
+                step("folder.fill", .blue, "Move to Applications",
+                     "Keeps the printer and the command working.", flow.applications)
+                Divider().padding(.leading, 52)
+                step("antenna.radiowaves.left.and.right", .indigo, "Allow Bluetooth",
+                     "Lets LabelBridge talk to your D11.", flow.bluetooth)
+                Divider().padding(.leading, 52)
+                step("printer.fill", .gray, "Add the printer",
+                     "Shows up in every app's Print dialog.", flow.printerQueue)
+                Divider().padding(.leading, 52)
+                step("terminal.fill", .black, "Install the labelbridge command",
+                     "Print from Terminal, scripts and AI assistants.", flow.cli)
+                Divider().padding(.leading, 52)
+                step("power", .orange, "Open at login",
+                     "Runs in the background so printing just works.", flow.login)
+            }
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color(nsColor: .controlBackgroundColor)))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.separator))
+
+            Text(footer)
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 14)
+
             HStack {
-                Button("Print Test Label") { Task { await flow.printTestLabel() } }.disabled(flow.running)
                 Spacer()
-                Button("Done") { onClose() }
-                Button("Set Up") { Task { await flow.runAll() } }.keyboardShortcut(.defaultAction).disabled(flow.running)
+                if flow.finished {
+                    Button("Done") { onClose() }.keyboardShortcut(.defaultAction)
+                } else {
+                    Button("Not Now") { onClose() }.disabled(flow.running)
+                    Button(flow.running ? "Setting Up…" : "Set Up") { Task { await flow.runAll() } }
+                        .keyboardShortcut(.defaultAction).disabled(flow.running)
+                }
             }
+            .controlSize(.large)
+            .padding(.top, 14)
         }
-        .padding(20)
-        .frame(width: 480)
+        .padding(24)
+        .frame(width: 460)
     }
 
-    @ViewBuilder private func row(_ title: String, _ status: StepStatus) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            switch status {
-            case .pending: Image(systemName: "circle").foregroundStyle(.secondary)
-            case .running: ProgressView().controlSize(.small)
-            case .done: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            case .failed: Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
-            case .skipped: Image(systemName: "minus.circle").foregroundStyle(.secondary)
-            }
+    private var footer: String {
+        flow.finished
+            ? "All set. Turn the D11 on, and keep the NIIMBOT phone app disconnected while printing from the Mac."
+            : "You may be asked for your password to add the printer and the command."
+    }
+
+    @ViewBuilder
+    private func step(_ symbol: String, _ tint: Color, _ title: String, _ detail: String, _ status: StepStatus) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: 28, height: 28)
+                .background(RoundedRectangle(cornerRadius: 7).fill(tint.gradient))
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                if case .failed(let m) = status { Text(m).font(.caption).foregroundStyle(.orange) }
-                if case .skipped(let m) = status { Text(m).font(.caption).foregroundStyle(.secondary).textSelection(.enabled) }
+                Text(title).font(.body.weight(.medium))
+                Group {
+                    switch status {
+                    case .failed(let message): Text(message).foregroundStyle(.orange)
+                    case .skipped(let message): Text(message).textSelection(.enabled)
+                    default: Text(detail)
+                    }
+                }
+                .font(.callout).foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 8)
+            statusMark(status).frame(width: 20)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+    }
+
+    @ViewBuilder
+    private func statusMark(_ status: StepStatus) -> some View {
+        switch status {
+        case .pending: EmptyView()
+        case .running: ProgressView().controlSize(.small)
+        case .done: Image(systemName: "checkmark.circle.fill").font(.title3).foregroundStyle(.green)
+        case .failed: Image(systemName: "exclamationmark.triangle.fill").font(.title3).foregroundStyle(.orange)
+        case .skipped: Image(systemName: "minus.circle.fill").font(.title3).foregroundStyle(.tertiary)
         }
     }
 }

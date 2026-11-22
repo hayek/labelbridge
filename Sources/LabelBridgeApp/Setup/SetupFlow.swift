@@ -5,7 +5,7 @@ import LabelCore
 
 enum StepStatus: Equatable { case pending, running, done, failed(String), skipped(String) }
 
-/// First-launch setup: Applications folder, Bluetooth, printer queue, CLI, login item, test label.
+/// First-launch setup: Applications folder, Bluetooth, printer queue, CLI, login item.
 @MainActor
 final class SetupFlow: ObservableObject {
     @Published var applications: StepStatus = .pending
@@ -13,8 +13,8 @@ final class SetupFlow: ObservableObject {
     @Published var printerQueue: StepStatus = .pending
     @Published var cli: StepStatus = .pending
     @Published var login: StepStatus = .pending
-    @Published var testLabel: StepStatus = .pending
     @Published var running = false
+    @Published var finished = false
 
     static let setupVersion = 1
     static var completed: Bool { UserDefaults.standard.integer(forKey: "setupVersion") >= setupVersion }
@@ -39,6 +39,7 @@ final class SetupFlow: ObservableObject {
         installCLI()
         applyLogin()
         if case .failed = printerQueue {} else { UserDefaults.standard.set(Self.setupVersion, forKey: "setupVersion") }
+        finished = true
     }
 
     /// Returns false when the app is relaunching from /Applications.
@@ -99,14 +100,6 @@ final class SetupFlow: ObservableObject {
     private func applyLogin() {
         LoginItem.apply(Settings.openAtLogin)
         login = Settings.openAtLogin ? (SMAppService.mainApp.status == .enabled ? .done : .failed("Turn on LabelBridge in System Settings › General › Login Items.")) : .skipped("Off in Settings")
-    }
-
-    func printTestLabel() async {
-        testLabel = .running
-        let job = LabelJob(items: ["LabelBridge ✓", "שלום · مرحبا"], size: Settings.labelSize, style: Settings.style,
-                           settings: PrintSettings(density: Settings.density, copies: 1), source: .window)
-        let r = await PrintService.shared.print(job)
-        testLabel = r.ok ? .done : .failed(r.error ?? "Failed")
     }
 
     // MARK: - Uninstall
