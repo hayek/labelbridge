@@ -71,6 +71,7 @@ struct HelpView: View {
             P("Choose **Sticker designer** at the top of the main window, then pick a template from **Templates**. The circular templates match two 14 mm circles on a 14 × 28 mm feed unit.")
             P("Use **Add Text** or **Add Icon** to add objects. Click an object to select it, drag it to move it, and drag the blue bottom-right handle to resize it. The inspector also accepts exact position and dimensions in millimetres.")
             P("Each circle can contain several independent text and icon objects. Use the **Objects** list to select overlapping objects, or **Delete object** to remove one. **Undo** and **Redo** reverse edits.")
+            P("Select a text object and edit its words in **Text content** on the right. You can change the font, bold, italic and alignment. **Auto-fit text** sizes the words to the object; turn it off to set **Font size** from 1–72 pt. The preview warns when the text does not fit.")
             P("Your draft is saved automatically. **Save Template** adds a named design to **My Templates**. Select **Transparent** for transparent rolls; **Print 1 Pair** prints both circles as one feed unit.")
             P("Circle outlines and selection handles never print. The preview uses the same bitmap as printing and warns if ink is outside the sticker or the printer's 12 mm print band.")
         case .cli:

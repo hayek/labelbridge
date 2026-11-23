@@ -103,6 +103,7 @@ public struct StickerDesign: Codable, Hashable, Sendable {
             throw StickerDesignError.invalidGeometry
         }
         for object in objects {
+            try object.style.validate()
             let f = object.frame
             guard [f.x, f.y, f.width, f.height].allSatisfy(\.isFinite),
                   f.width >= 1, f.height >= 1, f.x >= 0, f.y >= 0,

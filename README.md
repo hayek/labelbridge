@@ -41,8 +41,9 @@ Choose **Sticker designer** at the top of the window:
 
 1. Pick a template: **Appliances**, **Icons + text**, **Names**, **Blank circles**, or **Blank rectangle**.
 2. Use **Add Text** and **Add Icon** to add as many objects as needed. The icon library includes household appliances, lights and common symbols.
-3. Click an object to select it. Drag it to move it, or drag its blue bottom-right handle to resize it. The inspector also provides exact X, Y, width and height in millimetres, plus text/font controls.
-4. Choose **Transparent** for your transparent roll, set copies and print. **Print 1 Pair** prints one feed unit containing both circles.
+3. Click an object to select it. Drag it to move it, or drag its blue bottom-right handle to resize it. The inspector also provides exact X, Y, width and height in millimetres.
+4. For text objects, edit the words in **Text content** on the right. Choose a font, bold, italic and alignment. Keep **Auto-fit text** on to fit the object, or turn it off to choose an exact **Font size** in physical points (1–72 pt). Oversized text produces a preview warning.
+5. Choose **Transparent** for your transparent roll, set copies and print. **Print 1 Pair** prints one feed unit containing both circles.
 
 The circular template is two **14 mm circles** on a **14 × 28 mm** feed unit. Either circle can contain multiple independent text and icon objects, or remain blank. Circle outlines and selection handles are preview-only. The D110's print band is about 12 mm wide; the preview shows the actual printable ink and warns when content is clipped or text does not fit.
 

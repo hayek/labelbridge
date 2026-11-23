@@ -54,10 +54,56 @@ final class StickerDesignTests: XCTestCase {
     func testDesignRoundTripPreservesObjectsAndTypography() throws {
         var design = StickerTemplate.builtIn[1].design
         design.objects[1].content = .text("שלום")
-        design.objects[1].style = TextStyle(bold: true, alignment: .trailing)
+        design.objects[1].style = TextStyle(bold: true, alignment: .trailing, italic: true, fontSizePoints: 6)
         let decoded = try JSONDecoder().decode(StickerDesign.self, from: JSONEncoder().encode(design))
         XCTAssertEqual(decoded, design)
         XCTAssertEqual(try StickerDesignRenderer.render(decoded).bitmap, try StickerDesignRenderer.render(design).bitmap)
+    }
+
+    func testEditingTextChangesOnlyThatObjectsInk() throws {
+        var design = StickerTemplate.builtIn[2].design
+        let before = try StickerDesignRenderer.render(design).bitmap
+        design.objects[0].content = .text("Kitchen")
+        let after = try StickerDesignRenderer.render(design).bitmap
+        XCTAssertNotEqual(before, after)
+        for y in 0..<before.height {
+            for x in 166..<before.width {
+                XCTAssertEqual(before.isBlack(x: x, y: y), after.isBlack(x: x, y: y))
+            }
+        }
+    }
+
+    func testFixedPointSizeDoesNotGrowWhenObjectGetsTaller() throws {
+        var design = StickerDesign(size: LabelSize(14, 28), shape: .twoCircles, objects: [
+            StickerObject(content: .text("Hi"), frame: .init(x: 2, y: 4.5, width: 10, height: 3),
+                          style: TextStyle(fontSizePoints: 6)),
+        ])
+        let small = try StickerDesignRenderer.render(design).bitmap
+        design.objects[0].frame.y = 2
+        design.objects[0].frame.height = 8
+        let tall = try StickerDesignRenderer.render(design).bitmap
+        XCTAssertGreaterThan(inkHeight(small), 0)
+        XCTAssertEqual(inkHeight(small), inkHeight(tall))
+        design.objects[0].style.fontSizePoints = 10
+        let larger = try StickerDesignRenderer.render(design).bitmap
+        XCTAssertGreaterThan(inkHeight(larger), inkHeight(tall))
+    }
+
+    func testOlderStylesKeepAutomaticSizingAndNoItalic() throws {
+        let style = try JSONDecoder().decode(TextStyle.self, from: Data(#"{"bold":true,"alignment":"center"}"#.utf8))
+        XCTAssertEqual(style, TextStyle(bold: true))
+    }
+
+    func testOversizedTextWarnsAndInvalidFontSizesAreRejected() throws {
+        var design = StickerDesign(size: LabelSize(14, 28), shape: .twoCircles, objects: [
+            StickerObject(content: .text("Kitchen"), frame: .init(x: 2, y: 5, width: 10, height: 3),
+                          style: TextStyle(fontSizePoints: 48)),
+        ])
+        XCTAssertTrue(try StickerDesignRenderer.render(design).warning?.contains("text does not fit") == true)
+        for points in [Double.nan, 0, 100] {
+            design.objects[0].style.fontSizePoints = points
+            XCTAssertThrowsError(try StickerDesignRenderer.render(design))
+        }
     }
 
     func testInvalidGeometryIsRejectedBeforeRendering() {
@@ -78,5 +124,13 @@ final class StickerDesignTests: XCTestCase {
             for x in columns where bitmap.isBlack(x: x, y: y) { return true }
         }
         return false
+    }
+
+    private func inkHeight(_ bitmap: Bitmap) -> Int {
+        let rows = (0..<bitmap.height).filter { y in
+            (0..<bitmap.width).contains { x in bitmap.isBlack(x: x, y: y) }
+        }
+        guard let first = rows.first, let last = rows.last else { return 0 }
+        return last - first + 1
     }
 }

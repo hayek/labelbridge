@@ -47,16 +47,27 @@ struct StickerObjectInspector: View {
     let onChange: (StickerObject) -> Void
     let onDelete: () -> Void
     @State private var choosingIcon = false
+    @FocusState private var editingText: Bool
     private static let fonts = NSFontManager.shared.availableFontFamilies
 
     var body: some View {
         Section("Selected object") {
             switch object.content {
             case .text(let text):
-                TextField("Text", text: Binding(get: { text }, set: {
-                    var next = object; next.content = .text($0); onChange(next)
-                }), axis: .vertical)
-                .lineLimit(1...5)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Text content").font(.caption).foregroundStyle(.secondary)
+                    TextEditor(text: Binding(get: { text }, set: {
+                        var next = object; next.content = .text($0); onChange(next)
+                    }))
+                    .font(.system(size: 14))
+                    .focused($editingText)
+                    .frame(height: 80)
+                    .padding(4)
+                    .background(Color(nsColor: .textBackgroundColor))
+                    .overlay(RoundedRectangle(cornerRadius: 4).stroke(.secondary.opacity(0.35)))
+                    .accessibilityLabel("Text content")
+                    Text("Changes appear on the sticker immediately.").font(.caption).foregroundStyle(.secondary)
+                }
                 Picker("Font", selection: Binding(get: { object.style.fontName ?? "" }, set: {
                     var next = object; next.style.fontName = $0.isEmpty ? nil : $0; onChange(next)
                 })) {
@@ -64,6 +75,25 @@ struct StickerObjectInspector: View {
                     ForEach(Self.fonts, id: \.self) { Text($0).tag($0) }
                 }
                 Toggle("Bold", isOn: binding(\.style.bold))
+                Toggle("Italic", isOn: binding(\.style.italic))
+                Toggle("Auto-fit text", isOn: Binding(get: { object.style.fontSizePoints == nil }, set: {
+                    var next = object; next.style.fontSizePoints = $0 ? nil : 8; onChange(next)
+                }))
+                if let points = object.style.fontSizePoints {
+                    let value = Binding(get: { points }, set: {
+                        var next = object
+                        next.style.fontSizePoints = min(max($0, TextStyle.fontSizeRange.lowerBound), TextStyle.fontSizeRange.upperBound)
+                        onChange(next)
+                    })
+                    LabeledContent("Font size") {
+                        TextField("Font size", value: value, format: .number.precision(.fractionLength(0...1)))
+                            .labelsHidden().multilineTextAlignment(.trailing).frame(width: 48)
+                        Text("pt").foregroundStyle(.secondary)
+                        Stepper("Font size", value: value, in: TextStyle.fontSizeRange, step: 0.5).labelsHidden()
+                    }
+                } else {
+                    Text("Resize the object to change its fitted text size.").font(.caption).foregroundStyle(.secondary)
+                }
                 Picker("Alignment", selection: binding(\.style.alignment)) {
                     Image(systemName: "text.alignleft").tag(Alignment.leading)
                     Image(systemName: "text.aligncenter").tag(Alignment.center)
@@ -84,6 +114,12 @@ struct StickerObjectInspector: View {
             dimension("Height", path: \.frame.height, range: 1...max(1, size.widthMM - object.frame.y))
             Button(role: .destructive, action: onDelete) { Label("Delete object", systemImage: "trash") }
         }
+        .onAppear { focusText() }
+        .onChange(of: object.id) { _ in focusText() }
+    }
+
+    private func focusText() {
+        if case .text = object.content { editingText = true } else { editingText = false }
     }
 
     private func binding<Value>(_ path: WritableKeyPath<StickerObject, Value>) -> Binding<Value> {
