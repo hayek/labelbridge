@@ -76,6 +76,35 @@ Hardware history:
 - **Busy:** while the NIIMBOT phone app is connected, the printer stops advertising, so a Mac scan doesn't find it.
   LabelBridge reports "printer not found" after 15 s.
 
+## Original D110
+
+The original `D110-…` uses niimbluelib's `D110PrintTask`, not the D11_H's
+`D110MV4PrintTask`. Sending the D11_H's 13-byte page size to a D110 was observed to
+produce `DB 06` (print-data error) before any bitmap rows were sent.
+
+- Images are resized from the app's 300 dpi canvas to 203 dpi, with a 96-dot head
+  (12 bytes per row). Bitmap-row pixel counts are three separate 32-dot counts.
+- Density is limited to 1–3.
+- Setup: connect → density → label type → print start with the one-byte payload `01`.
+- Each page: clear (`20`/`30`) → page start (`03`/`04`) → four-byte page size
+  (`13`/`14`, rows u16 + cols u16) → quantity (`15`/`16`, copies u16) → rows → page end.
+- Poll the cumulative print counter until that page's copies finish **before clearing
+  the next page**. End the job with print end; no D11_H heartbeat is needed.
+- Only the exact `D110` name or `D110-` prefix selects this path; `D110_M` is a
+  different model.
+- One label was confirmed printed on an original D110 after switching to this sequence.
+
+## Transparent labels
+
+Label type command `23` uses `01` for standard gap labels and `05` for transparent
+media (`LabelType.Transparent` in niimbluelib). The window, CLI and CUPS listener
+share the saved media setting. Older IPC print requests without a media field
+continue using gap labels.
+
+TT14×28-220 rolls use a 14 × 28 mm page; “220” is the roll's label count. On the
+D110 this produces 224 rows × 96 columns. Other printers retain their existing
+resolution and print sequence.
+
 ## Print dialog (CUPS)
 
 The bundled PPD (`NIIMBOT_D11.ppd`) declares `*cupsFilter2: "application/pdf application/pdf 0 -"`, so CUPS runs no

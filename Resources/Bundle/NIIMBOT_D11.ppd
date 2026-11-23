@@ -29,6 +29,7 @@
 *PageSize 15x30mm/15 x 30 mm: "<</PageSize[85.04 42.52]/ImagingBBox null>>setpagedevice"
 *PageSize 12x22mm/12 x 22 mm: "<</PageSize[62.36 34.02]/ImagingBBox null>>setpagedevice"
 *PageSize 14x22mm/14 x 22 mm: "<</PageSize[62.36 39.69]/ImagingBBox null>>setpagedevice"
+*PageSize 14x28mm/14 x 28 mm: "<</PageSize[79.37 39.69]/ImagingBBox null>>setpagedevice"
 *PageSize 15x40mm/15 x 40 mm: "<</PageSize[113.39 42.52]/ImagingBBox null>>setpagedevice"
 *CloseUI: *PageSize
 
@@ -41,6 +42,7 @@
 *PageRegion 15x30mm/15 x 30 mm: "<</PageSize[85.04 42.52]/ImagingBBox null>>setpagedevice"
 *PageRegion 12x22mm/12 x 22 mm: "<</PageSize[62.36 34.02]/ImagingBBox null>>setpagedevice"
 *PageRegion 14x22mm/14 x 22 mm: "<</PageSize[62.36 39.69]/ImagingBBox null>>setpagedevice"
+*PageRegion 14x28mm/14 x 28 mm: "<</PageSize[79.37 39.69]/ImagingBBox null>>setpagedevice"
 *PageRegion 15x40mm/15 x 40 mm: "<</PageSize[113.39 42.52]/ImagingBBox null>>setpagedevice"
 *CloseUI: *PageRegion
 
@@ -51,6 +53,7 @@
 *ImageableArea 15x30mm/15 x 30 mm: "0 0 85.04 42.52"
 *ImageableArea 12x22mm/12 x 22 mm: "0 0 62.36 34.02"
 *ImageableArea 14x22mm/14 x 22 mm: "0 0 62.36 39.69"
+*ImageableArea 14x28mm/14 x 28 mm: "0 0 79.37 39.69"
 *ImageableArea 15x40mm/15 x 40 mm: "0 0 113.39 42.52"
 
 *DefaultPaperDimension: 15x50mm
@@ -60,4 +63,5 @@
 *PaperDimension 15x30mm/15 x 30 mm: "85.04 42.52"
 *PaperDimension 12x22mm/12 x 22 mm: "62.36 34.02"
 *PaperDimension 14x22mm/14 x 22 mm: "62.36 39.69"
+*PaperDimension 14x28mm/14 x 28 mm: "79.37 39.69"
 *PaperDimension 15x40mm/15 x 40 mm: "113.39 42.52"

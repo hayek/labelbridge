@@ -29,23 +29,7 @@ public enum TextRenderer {
         let margin = LabelSize.endMarginPixels
         let availableWidth = CGFloat(length - 2 * margin)
         let usableHeight = CGFloat(height) - 2 * verticalPadding
-        let lines = text.components(separatedBy: "\n")
-
-        // Largest font size whose lines fit the width and whose actual ink fits the print band.
-        // Ink is measured from a rendering, so fallback fonts (Arabic, CJK, emoji) are accounted for.
-        func widthFits(_ font: NSFont) -> Bool { lines.allSatisfy { measure($0, font: font) <= availableWidth } }
-        func fits(_ px: CGFloat) -> Bool {
-            let font = makeFont(style, px)
-            guard widthFits(font) else { return false }
-            return drawBlock(lines, font: font, style: style, width: Int(availableWidth), keepPixels: false).inkHeight <= Int(usableHeight)
-        }
-        var lo = minFontPixels, hi = CGFloat(height)
-        if fits(lo) {
-            while hi - lo > 0.5 { let mid = (lo + hi) / 2; if fits(mid) { lo = mid } else { hi = mid } }
-        }
-        let font = makeFont(style, lo)
-        let truncated = !widthFits(font)
-        let block = drawBlock(lines, font: font, style: style, width: Int(availableWidth))
+        let (block, truncated) = fittedBlock(text, style: style, width: Int(availableWidth), height: Int(usableHeight))
 
         // Copy the inked rows into the label, centred vertically, between the end margins.
         var pixels = [Bool](repeating: false, count: length * height)
@@ -57,6 +41,23 @@ public enum TextRenderer {
         }
         let warning = truncated ? "Text too long for a \(size) mm label; shortened with \"…\": \(text.prefix(40))" : nil
         return RenderResult(bitmap: Bitmap(width: length, height: height, pixels: pixels), warning: warning)
+    }
+
+    /// Fits actual ink rather than font metrics, including fallback fonts and right-to-left shaping.
+    static func fittedBlock(_ text: String, style: TextStyle, width: Int, height: Int) -> (Block, Bool) {
+        let lines = text.components(separatedBy: "\n")
+        func widthFits(_ font: NSFont) -> Bool { lines.allSatisfy { measure($0, font: font) <= CGFloat(width) } }
+        func fits(_ px: CGFloat) -> Bool {
+            let font = makeFont(style, px)
+            guard widthFits(font) else { return false }
+            return drawBlock(lines, font: font, style: style, width: width, keepPixels: false).inkHeight <= height
+        }
+        var lo = minFontPixels, hi = CGFloat(height) + 2 * verticalPadding
+        if fits(lo) {
+            while hi - lo > 0.5 { let mid = (lo + hi) / 2; if fits(mid) { lo = mid } else { hi = mid } }
+        }
+        let font = makeFont(style, lo)
+        return (drawBlock(lines, font: font, style: style, width: width), !widthFits(font))
     }
 
     struct Block {

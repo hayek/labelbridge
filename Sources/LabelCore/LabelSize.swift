@@ -18,6 +18,7 @@ public struct LabelSize: Codable, Hashable, Sendable, CustomStringConvertible {
     public static let builtIn: [LabelSize] = [
         LabelSize(15, 50), LabelSize(12, 40), LabelSize(14, 40), LabelSize(15, 30),
         LabelSize(12, 22), LabelSize(14, 22), LabelSize(15, 40),
+        LabelSize(14, 28),
     ]
 
     /// Parses "50x15", "15x50", "15×50" or "15 x 50 mm".

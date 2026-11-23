@@ -1,17 +1,46 @@
 /// A byte pipe to a printer (Bluetooth in the app, simulated in tests).
 public protocol PrinterLink: AnyObject, Sendable {
+    var profile: PrinterProfile { get }
     func send(_ bytes: [UInt8]) async throws
     /// Parsed packets from the printer.
     var replies: AsyncStream<Packet> { get }
     func close() async
 }
 
+extension PrinterLink {
+    public var profile: PrinterProfile { .d11H }
+}
+
+public enum LabelMedia: String, Codable, CaseIterable, Sendable {
+    case gaps, transparent
+
+    public var title: String {
+        switch self {
+        case .gaps: return "Standard (with gaps)"
+        case .transparent: return "Transparent"
+        }
+    }
+
+    var commandValue: UInt8 { self == .transparent ? 5 : 1 }
+}
+
 public struct PrintSettings: Codable, Hashable, Sendable {
     public var density: Int     // 1–5
     public var copies: Int      // ≥ 1
-    public init(density: Int = 3, copies: Int = 1) {
+    public var media: LabelMedia
+    public init(density: Int = 3, copies: Int = 1, media: LabelMedia = .gaps) {
         self.density = min(max(density, 1), 5)
         self.copies = max(copies, 1)
+        self.media = media
+    }
+
+    private enum CodingKeys: String, CodingKey { case density, copies, media }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        density = try values.decode(Int.self, forKey: .density)
+        copies = try values.decode(Int.self, forKey: .copies)
+        media = try values.decodeIfPresent(LabelMedia.self, forKey: .media) ?? .gaps
     }
 }
 

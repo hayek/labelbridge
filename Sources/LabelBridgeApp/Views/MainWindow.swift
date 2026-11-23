@@ -8,6 +8,8 @@ struct MainWindow: View {
     @State private var text = ""
     @State private var size = Settings.labelSize
     @State private var density = Settings.density
+    @State private var media = Settings.media
+    @State private var layout = Settings.layout
     @State private var copies = 1
     @State private var alignment = Settings.alignment
     @State private var fontName = Settings.fontName ?? ""
@@ -23,16 +25,27 @@ struct MainWindow: View {
     private var labelCount: Int { parsed.items.count * copies }
 
     var body: some View {
-        HStack(spacing: 0) {
-            editor.frame(width: 260)
-            Divider()
-            canvas.frame(minWidth: 380, maxWidth: .infinity)
-            Divider()
-            inspector.frame(width: 300)
+        Group {
+            if layout == .designer {
+                StickerDesigner()
+            } else {
+                HStack(spacing: 0) {
+                    editor.frame(width: 260)
+                    Divider()
+                    canvas.frame(minWidth: 380, maxWidth: .infinity)
+                    Divider()
+                    inspector.frame(width: 300)
+                }
+            }
         }
-        .frame(minWidth: 960, minHeight: 540)
+        .frame(minWidth: 960, minHeight: 600)
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
+                Picker("Mode", selection: $layout) {
+                    ForEach(LabelLayout.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 260)
                 Spacer()
                 ToolbarPrinterStatus()
                 Spacer()
@@ -43,6 +56,7 @@ struct MainWindow: View {
             }
         }
         .onAppear { MainWindowOpener.open = { [openWindow] in openWindow(id: "main") } }
+        .onChange(of: layout) { Settings.layout = $0 }
     }
 
     // MARK: - Labels
@@ -124,6 +138,12 @@ struct MainWindow: View {
                         }
                     }
                     .onChange(of: size) { Settings.labelSize = $0 }
+                    Picker("Media", selection: $media) {
+                        ForEach(LabelMedia.allCases, id: \.self) {
+                            Text($0.title).tag($0)
+                        }
+                    }
+                    .onChange(of: media) { Settings.media = $0 }
                     LabeledContent("Copies") {
                         Stepper("\(copies)", value: $copies, in: 1...99).monospacedDigit()
                     }
@@ -170,7 +190,7 @@ struct MainWindow: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .keyboardShortcut("p")
-                .disabled(printing || parsed.items.isEmpty)
+                .disabled(printing || labelCount == 0)
 
                 if let outcome {
                     Label(outcome.text, systemImage: outcome.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
@@ -198,12 +218,13 @@ struct MainWindow: View {
         printing = true
         outcome = nil
         let job = LabelJob(items: Batch.lines(from: text), size: size, style: style,
-                           settings: PrintSettings(density: density, copies: copies), source: .window)
+                           settings: PrintSettings(density: density, copies: copies, media: media), source: .window)
         let r = await service.print(job)
         printing = false
         if r.ok {
-            let shortened = r.warnings.isEmpty ? "" : " (\(r.warnings.count) shortened to fit)"
-            outcome = (true, "Printed \(r.printed) \(r.printed == 1 ? "label" : "labels")" + shortened)
+            let unit = r.printed == 1 ? "label" : "labels"
+            let warning = r.warnings.isEmpty ? "" : " " + r.warnings.joined(separator: " ")
+            outcome = (true, "Printed \(r.printed) \(unit)." + warning)
         } else {
             outcome = (false, r.error ?? "Printing failed")
         }

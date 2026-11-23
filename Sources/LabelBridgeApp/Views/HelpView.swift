@@ -6,6 +6,7 @@ struct HelpView: View {
     enum Topic: String, CaseIterable, Identifiable {
         case start = "Getting Started"
         case window = "Printing Labels"
+        case designer = "Sticker Designer"
         case cli = "Command Line"
         case agents = "AI Agents"
         case dialog = "Print Dialog"
@@ -16,6 +17,7 @@ struct HelpView: View {
             switch self {
             case .start: return "sparkles"
             case .window: return "tag"
+            case .designer: return "square.and.pencil"
             case .cli: return "terminal"
             case .agents: return "cpu"
             case .dialog: return "printer"
@@ -65,6 +67,12 @@ struct HelpView: View {
             P("On the right, choose the label size, copies, darkness, font, bold and alignment. LabelBridge remembers them, and the command line uses them as its defaults.")
             P("Any language works, including Hebrew and Arabic. Alignment follows the text: “start” is the right side for right-to-left text.")
             P("Press **⌘P** to print.")
+        case .designer:
+            P("Choose **Sticker designer** at the top of the main window, then pick a template from **Templates**. The circular templates match two 14 mm circles on a 14 × 28 mm feed unit.")
+            P("Use **Add Text** or **Add Icon** to add objects. Click an object to select it, drag it to move it, and drag the blue bottom-right handle to resize it. The inspector also accepts exact position and dimensions in millimetres.")
+            P("Each circle can contain several independent text and icon objects. Use the **Objects** list to select overlapping objects, or **Delete object** to remove one. **Undo** and **Redo** reverse edits.")
+            P("Your draft is saved automatically. **Save Template** adds a named design to **My Templates**. Select **Transparent** for transparent rolls; **Print 1 Pair** prints both circles as one feed unit.")
+            P("Circle outlines and selection handles never print. The preview uses the same bitmap as printing and warns if ink is outside the sticker or the printer's 12 mm print band.")
         case .cli:
             P("The `labelbridge` command prints labels from Terminal and scripts. It talks to LabelBridge, which opens in the background if it isn't running.")
             Code("""
@@ -92,6 +100,7 @@ struct HelpView: View {
             P("Built-in sizes, width × length in mm:")
             Code(LabelSize.builtIn.map { "\($0.description)" + ($0 == .defaultSize ? "   (default)" : "") }.joined(separator: "\n"))
             P("On the command line, any other size works with `--size WxL`, for example `--size 12x30`.")
+            P("For TT14×28-220 transparent rolls, choose **14 × 28 mm** and **Media: Transparent**. The roll contains 220 labels. The command-line equivalent is `--size 14x28 --media transparent`. Print-dialog jobs also use the window's Media setting.")
             P("The D11's print head is 12 mm wide, so wider labels print in a 12 mm band in the middle. LabelBridge leaves 2 mm empty at each end so nothing is cut off.")
         case .trouble:
             Item("“Looking for your D11…” or exit code 3",

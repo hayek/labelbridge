@@ -41,4 +41,21 @@ final class RowEncoderTests: XCTestCase {
         XCTAssertEqual(Array(row.data[2..<5]), [0, 142, 0])
         XCTAssertEqual(row.data.count, 6 + 18)
     }
+
+    func testD110CountsEach32DotSectionSeparately() {
+        let page = RowEncoder.encode(bitmap(width: 1, height: 96) { _, y in
+            y >= 64 || y == 32 || y < 2
+        }, profile: .d110)
+        let row = rowPackets(page).first!
+        XCTAssertEqual(page.cols, 96)
+        XCTAssertEqual(Array(row.data[2..<5]), [32, 1, 2])
+        XCTAssertEqual(row.data.count, 6 + 12)
+    }
+
+    func testD110NameDoesNotMatchD110MOrD11H() {
+        XCTAssertEqual(PrinterProfile(name: "D110-1234"), .d110)
+        XCTAssertEqual(PrinterProfile(name: "D110"), .d110)
+        XCTAssertEqual(PrinterProfile(name: "D110_M-1234"), .d11H)
+        XCTAssertEqual(PrinterProfile(name: "D11_H-1234"), .d11H)
+    }
 }

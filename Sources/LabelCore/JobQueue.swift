@@ -88,11 +88,12 @@ public actor JobQueue {
                             makeSession: @Sendable (PrinterLink) -> PrintSession,
                             progress: Progress) async -> JobResult {
         let total = bitmaps.count * settings.copies
-        let pages = bitmaps.map(RowEncoder.encode)
         var link: PrinterLink?
         do {
-            link = try await makeLink()
-            let printed = try await makeSession(link!).run(pages: pages, settings: settings, progress: progress)
+            let connected = try await makeLink()
+            link = connected
+            let pages = bitmaps.map { RowEncoder.encode(connected.profile.prepare($0), profile: connected.profile) }
+            let printed = try await makeSession(connected).run(pages: pages, settings: settings, progress: progress)
             await link?.close()
             return JobResult(ok: true, printed: printed, total: total)
         } catch {

@@ -4,6 +4,7 @@ import LabelCore
 /// `PrinterLink` over the D11's single GATT characteristic (write without response + notify).
 final class BLEPrinterLink: NSObject, PrinterLink, CBPeripheralDelegate, @unchecked Sendable {
     let peripheral: CBPeripheral
+    let profile: PrinterProfile
     private weak var central: CBCentralManager?
     private var characteristic: CBCharacteristic?
     private var parser = FrameParser()
@@ -16,6 +17,7 @@ final class BLEPrinterLink: NSObject, PrinterLink, CBPeripheralDelegate, @unchec
 
     init(peripheral: CBPeripheral, central: CBCentralManager) {
         self.peripheral = peripheral
+        self.profile = PrinterProfile(name: peripheral.name ?? "")
         self.central = central
         var c: AsyncStream<Packet>.Continuation!
         replies = AsyncStream(bufferingPolicy: .unbounded) { c = $0 }

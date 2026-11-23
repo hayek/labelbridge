@@ -13,6 +13,21 @@ final class IPCTests: XCTestCase {
         XCTAssertFalse(data.dropLast().contains(UInt8(ascii: "\n")))
     }
 
+    func testTransparentMediaSurvivesIPC() throws {
+        var transparent = job
+        transparent.settings.media = .transparent
+        transparent.size = LabelSize(14, 28)
+        let data = try IPCCoding.encode(IPCRequest.print(transparent))
+        guard case .print(let decoded) = try IPCCoding.decode(IPCRequest.self, from: data) else { return XCTFail() }
+        XCTAssertEqual(decoded.settings.media, .transparent)
+        XCTAssertEqual(decoded.size, LabelSize(14, 28))
+    }
+
+    func testOlderPrintSettingsDefaultToGapMedia() throws {
+        let settings = try JSONDecoder().decode(PrintSettings.self, from: Data(#"{"density":2,"copies":3}"#.utf8))
+        XCTAssertEqual(settings, PrintSettings(density: 2, copies: 3, media: .gaps))
+    }
+
     func testServerClientRoundTrip() throws {
         let path = NSTemporaryDirectory() + "lb-\(UUID().uuidString.prefix(8)).sock"
         let server = try IPCServer(path: path) { request, send in
