@@ -14,6 +14,7 @@ struct StickerDesigner: View {
     @Binding var density: Int
     @Binding var media: LabelMedia
     @State private var printing = false
+    @State private var offset = Settings.stickerOffset
     @State private var outcome: (ok: Bool, text: String)?
 
     private var selected: StickerObject? { store.design.objects.first { $0.id == selectedID } }
@@ -220,6 +221,22 @@ struct StickerDesigner: View {
                     Stepper("Darkness: \(density)", value: $density, in: 1...5)
                         .onChange(of: density) { Settings.density = $0 }
                 }
+                Section {
+                    offsetField("Move right", value: $offset.x)
+                    offsetField("Move down", value: $offset.y)
+                    Button { Task { await printDesign(alignmentTest: true) } } label: {
+                        Label("Print Alignment Test", systemImage: "scope")
+                    }
+                } header: {
+                    Text("Alignment")
+                } footer: {
+                    Text(store.design.shape == .twoCircles
+                         ? "The test prints a ring and a cross in the middle of each circle. If they're off-centre, move the print by that much and test again."
+                         : "The test prints an outline 1 mm inside the label and a cross in the middle. If it's off-centre, move the print by that much and test again.")
+                        .font(.caption).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .onChange(of: offset) { Settings.stickerOffset = $0 }
             }
             .formStyle(.grouped)
             .scrollContentBackground(.hidden)
@@ -245,6 +262,14 @@ struct StickerDesigner: View {
         .background(Color(nsColor: .windowBackgroundColor))
     }
 
+    /// A value and a stepper, not a text field: a text field here would take keyboard focus when the window opens.
+    private func offsetField(_ title: String, value: Binding<Double>) -> some View {
+        LabeledContent(title) {
+            Text("\(value.wrappedValue, specifier: "%.2f") mm").monospacedDigit().foregroundStyle(.secondary)
+            Stepper(title, value: value, in: StickerOffset.range, step: 0.25).labelsHidden()
+        }
+    }
+
     private func objectSymbol(_ object: StickerObject) -> String {
         if case .icon(let icon) = object.content { return icon.rawValue }
         return "textformat"
@@ -255,22 +280,21 @@ struct StickerDesigner: View {
         sidebarTab = 1
     }
 
-    private func printDesign() async {
+    private func printDesign(alignmentTest: Bool = false) async {
         printing = true
         outcome = nil
         defer { printing = false }
-        do {
-            let rendered = try StickerDesignRenderer.render(store.design)
-            let result = await service.print(bitmaps: [rendered.bitmap], settings: PrintSettings(density: density, copies: copies, media: media))
-            if result.ok {
-                let unit = store.design.shape == .twoCircles ? (result.printed == 1 ? "pair" : "pairs") : (result.printed == 1 ? "label" : "labels")
-                outcome = (true, "Printed \(result.printed) \(unit)." + (rendered.warning.map { " " + $0 } ?? ""))
-            } else {
-                outcome = (false, result.error ?? "Printing failed.")
-            }
-        } catch {
-            Log.write("sticker design: \(error.localizedDescription)")
-            outcome = (false, error.localizedDescription)
+        let job = StickerJob(design: store.design, settings: PrintSettings(density: density, copies: alignmentTest ? 1 : copies, media: media),
+                             source: .window, alignmentTest: alignmentTest)
+        let result = await service.print(job)
+        if result.ok {
+            let pairs = store.design.shape == .twoCircles
+            let unit = pairs ? (result.printed == 1 ? "pair" : "pairs") : (result.printed == 1 ? "label" : "labels")
+            outcome = (true, alignmentTest ? "Printed the alignment test." : "Printed \(result.printed) \(unit)."
+                       + result.warnings.map { " " + $0 }.joined())
+        } else {
+            Log.write("sticker design: \(result.error ?? "failed")")
+            outcome = (false, result.error ?? "Printing failed.")
         }
     }
 }

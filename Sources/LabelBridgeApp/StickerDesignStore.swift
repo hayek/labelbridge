@@ -21,7 +21,7 @@ final class StickerDesignStore: ObservableObject {
         var design = StickerTemplate.builtIn[0].design
         var templates: [StickerTemplate] = []
         var errors: [String] = []
-        if let data = defaults.data(forKey: "stickerDesign") {
+        if let data = defaults.data(forKey: StickerLibrary.draftKey) {
             do {
                 let saved = try JSONDecoder().decode(StickerDesign.self, from: data)
                 try saved.validate()
@@ -30,7 +30,7 @@ final class StickerDesignStore: ObservableObject {
                 errors.append("Couldn't restore your design: \(error.localizedDescription)")
             }
         }
-        if let data = defaults.data(forKey: "stickerTemplates") {
+        if let data = defaults.data(forKey: StickerLibrary.templatesKey) {
             do {
                 templates = try JSONDecoder().decode([StickerTemplate].self, from: data)
                 for template in templates { try template.design.validate() }
@@ -106,7 +106,7 @@ final class StickerDesignStore: ObservableObject {
         do {
             let updated = savedTemplates + [StickerTemplate(name: name, design: design)]
             let data = try JSONEncoder().encode(updated)
-            defaults.set(data, forKey: "stickerTemplates")
+            defaults.set(data, forKey: StickerLibrary.templatesKey)
             savedTemplates = updated
             return true
         } catch { report(error); return false }
@@ -119,7 +119,7 @@ final class StickerDesignStore: ObservableObject {
     }
 
     private func persistDesign() {
-        do { defaults.set(try JSONEncoder().encode(design), forKey: "stickerDesign") }
+        do { defaults.set(try JSONEncoder().encode(design), forKey: StickerLibrary.draftKey) }
         catch { report(error) }
     }
 

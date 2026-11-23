@@ -116,3 +116,39 @@ final class CommandLog: @unchecked Sendable {
     func append(_ c: UInt8) { lock.lock(); items.append(c); lock.unlock() }
     var all: [UInt8] { lock.lock(); defer { lock.unlock() }; return items }
 }
+
+final class D110CopiesTests: XCTestCase {
+    /// niimbluelib's D110 task waits after each page until the printer's cumulative page counter
+    /// reaches all copies printed so far; with 2 copies of 2 labels, page 2 starts at counter 2.
+    func testD110WaitsForEveryCopyBeforeTheNextLabel() async {
+        let printer = SimulatedPrinter()
+        printer.profile = .d110
+        printer.labelDuration = .milliseconds(30)
+        let counters = CommandLog()
+        printer.onSend = { if $0.cmd == Cmd.printClear.rawValue { counters.append(UInt8(printer.counter)) } }
+        let queue = JobQueue(makeLink: { printer }, makeSession: {
+            PrintSession(link: $0, replyTimeout: .milliseconds(200), statusTimeout: .seconds(1), rowInterval: .zero, pollInterval: .milliseconds(5))
+        })
+        let job = LabelJob(items: ["One", "Two", "Three"], size: .defaultSize, style: TextStyle(),
+                           settings: PrintSettings(copies: 2), source: .window)
+        let result = await queue.submit(job) { _, _ in }
+        XCTAssertTrue(result.ok, result.error ?? "")
+        XCTAssertEqual(result.printed, 6)
+        XCTAssertEqual(counters.all, [0, 2, 4])
+    }
+
+    func testStickerJobPrintsOnePagePerCopyOnTheD110() async {
+        let printer = SimulatedPrinter()
+        printer.profile = .d110
+        let queue = JobQueue(makeLink: { printer }, makeSession: {
+            PrintSession(link: $0, replyTimeout: .milliseconds(200), statusTimeout: .seconds(1), rowInterval: .zero, pollInterval: .milliseconds(5))
+        })
+        let job = StickerJob(design: StickerTemplate.builtIn[2].design, settings: PrintSettings(copies: 3, media: .transparent), source: .cli)
+        let result = await queue.submit(job) { _, _ in }
+        XCTAssertTrue(result.ok, result.error ?? "")
+        XCTAssertEqual(result.printed, 3)
+        XCTAssertEqual(printer.sent.first { $0.cmd == 0x13 }?.data, [0, 224, 0, 96])
+        XCTAssertEqual(printer.sent.first { $0.cmd == 0x15 }?.data, [0, 3])
+        XCTAssertEqual(printer.sent.first { $0.cmd == 0x23 }?.data, [5])
+    }
+}

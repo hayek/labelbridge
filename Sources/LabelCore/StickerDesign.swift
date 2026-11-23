@@ -50,8 +50,58 @@ public struct StickerFrame: Codable, Hashable, Sendable {
     }
 }
 
-public enum StickerContent: Codable, Hashable, Sendable {
+extension StickerIcon {
+    /// Matches the symbol name ("lamp.ceiling"), the case name ("ceilingLight") or the title ("Ceiling light").
+    public init?(named name: String) {
+        func key(_ s: String) -> String { s.lowercased().filter { $0.isLetter || $0.isNumber } }
+        let wanted = key(name)
+        guard !wanted.isEmpty,
+              let match = Self.allCases.first(where: { [$0.rawValue, "\($0)", $0.title].contains { key($0) == wanted } })
+        else { return nil }
+        self = match
+    }
+
+    public init(from decoder: Decoder) throws {
+        let name = try decoder.singleValueContainer().decode(String.self)
+        guard let icon = StickerIcon(named: name) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: "Unknown icon \"\(name)\". Run `labelbridge sticker icons` for the list."))
+        }
+        self = icon
+    }
+}
+
+/// Coded as `{"text": "Kitchen"}` or `{"icon": "microwave"}`.
+/// Drafts saved by LabelBridge 1.0.2–1.0.3 used `{"text": {"_0": "Kitchen"}}`, which still decodes.
+public enum StickerContent: Hashable, Sendable {
     case text(String), icon(StickerIcon)
+}
+
+extension StickerContent: Codable {
+    private enum Keys: String, CodingKey { case text, icon }
+    private enum Legacy: String, CodingKey { case _0 }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: Keys.self)
+        if c.contains(.text) {
+            if let text = try? c.decode(String.self, forKey: .text) { self = .text(text); return }
+            self = .text(try c.nestedContainer(keyedBy: Legacy.self, forKey: .text).decode(String.self, forKey: ._0))
+        } else if c.contains(.icon) {
+            if (try? c.decode(String.self, forKey: .icon)) != nil { self = .icon(try c.decode(StickerIcon.self, forKey: .icon)); return }
+            self = .icon(try c.nestedContainer(keyedBy: Legacy.self, forKey: .icon).decode(StickerIcon.self, forKey: ._0))
+        } else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: #"An object's content must be {"text": "…"} or {"icon": "…"}."#))
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: Keys.self)
+        switch self {
+        case .text(let text): try c.encode(text, forKey: .text)
+        case .icon(let icon): try c.encode(icon, forKey: .icon)
+        }
+    }
 }
 
 public struct StickerObject: Identifiable, Codable, Hashable, Sendable {
@@ -66,6 +116,17 @@ public struct StickerObject: Identifiable, Codable, Hashable, Sendable {
         self.content = content
         self.frame = frame
         self.style = style
+    }
+
+    private enum CodingKeys: String, CodingKey { case id, content, frame, style }
+
+    /// `id` and `style` are optional so design files can be written by hand.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        content = try c.decode(StickerContent.self, forKey: .content)
+        frame = try c.decode(StickerFrame.self, forKey: .frame)
+        style = try c.decodeIfPresent(TextStyle.self, forKey: .style) ?? TextStyle()
     }
 
     public var title: String {
@@ -92,6 +153,22 @@ public struct StickerDesign: Codable, Hashable, Sendable {
         self.size = size
         self.shape = shape
         self.objects = objects
+    }
+
+    /// The text objects, in the order of the designer's Objects list.
+    public var textSlots: [String] {
+        objects.compactMap { if case .text(let text) = $0.content { return text } else { return nil } }
+    }
+
+    /// Replaces the text of the first `texts.count` text objects, in order; the rest keep their text.
+    public func fillingText(_ texts: [String]) throws -> StickerDesign {
+        let slots = objects.indices.filter { if case .text = objects[$0].content { return true } else { return false } }
+        guard texts.count <= slots.count else {
+            throw StickerDesignError.tooManyTexts(given: texts.count, slots: slots.count)
+        }
+        var filled = self
+        for (index, text) in zip(slots, texts) { filled.objects[index].content = .text(text) }
+        return filled
     }
 
     public func validate() throws {
@@ -152,12 +229,15 @@ public struct StickerTemplate: Identifiable, Codable, Hashable, Sendable {
 }
 
 public enum StickerDesignError: LocalizedError {
-    case invalidGeometry, unavailableIcon(String)
+    case invalidGeometry, unavailableIcon(String), tooManyTexts(given: Int, slots: Int), empty
 
     public var errorDescription: String? {
         switch self {
         case .invalidGeometry: return "The design has invalid dimensions. Keep objects inside the label and use at most 100 objects."
         case .unavailableIcon(let title): return "The \(title) icon is unavailable on this version of macOS. Choose another icon."
+        case .tooManyTexts(let given, let slots):
+            return "Got \(given) texts, but the design has \(slots) text \(slots == 1 ? "object" : "objects")."
+        case .empty: return "The design is empty. Add text or an icon first."
         }
     }
 }
@@ -220,6 +300,41 @@ public enum StickerDesignRenderer {
                             warning: warnings.isEmpty ? nil : warnings.joined(separator: "\n"))
     }
 
+    /// Guides for checking where the printer puts ink on a roll: for paired circles, a 11 mm ring and a
+    /// cross at each circle's centre, with a dot in the left circle so the print can be held the way
+    /// the designer shows it. For rectangles, an outline 1 mm inside the label ends and the print band.
+    public static func alignmentTest(size: LabelSize, shape: StickerShape) -> Bitmap {
+        let scale = LabelSize.dpi / 25.4
+        let (width, height) = size.canvasPixels
+        let bandTop = (Int((size.widthMM * scale).rounded()) - height) / 2
+        let line = 0.3, centreY = size.widthMM / 2
+        var pixels = [Bool](repeating: false, count: width * height)
+        for row in 0..<height {
+            for column in 0..<width {
+                let x = (Double(column) + 0.5) / scale, y = (Double(row + bandTop) + 0.5) / scale
+                var ink = false
+                if shape == .twoCircles {
+                    let cx = x < size.lengthMM / 2 ? size.widthMM / 2 : size.lengthMM - size.widthMM / 2
+                    let distance = ((x - cx) * (x - cx) + (y - centreY) * (y - centreY)).squareRoot()
+                    let ring = abs(distance - 5.5) <= line / 2
+                    let cross = (abs(x - cx) <= line / 2 && abs(y - centreY) <= 1.5) || (abs(y - centreY) <= line / 2 && abs(x - cx) <= 1.5)
+                    let dot = cx < size.lengthMM / 2 && (x - cx) * (x - cx) + (y - centreY + 3) * (y - centreY + 3) <= 0.36
+                    ink = ring || cross || dot
+                } else {
+                    let top = Double(bandTop) / scale + 0.5, bottom = Double(bandTop + height) / scale - 0.5
+                    let left = 1.0, right = size.lengthMM - 1
+                    let inside = x >= left - line / 2 && x <= right + line / 2 && y >= top - line / 2 && y <= bottom + line / 2
+                    let edge = abs(x - left) <= line / 2 || abs(x - right) <= line / 2 || abs(y - top) <= line / 2 || abs(y - bottom) <= line / 2
+                    let cx = size.lengthMM / 2
+                    let cross = (abs(x - cx) <= line / 2 && abs(y - centreY) <= 1.5) || (abs(y - centreY) <= line / 2 && abs(x - cx) <= 1.5)
+                    ink = (inside && edge) || cross
+                }
+                pixels[row * width + column] = ink
+            }
+        }
+        return Bitmap(width: width, height: height, pixels: pixels)
+    }
+
     private static func renderIcon(_ icon: StickerIcon, width: Int, height: Int) throws -> Bitmap {
         let configuration = NSImage.SymbolConfiguration(pointSize: CGFloat(max(width, height)), weight: .regular)
             .applying(.init(paletteColors: [.black]))
@@ -246,5 +361,134 @@ public enum StickerDesignRenderer {
         }
         guard pixels.contains(true) else { throw StickerDesignError.unavailableIcon(icon.title) }
         return Bitmap(width: width, height: height, pixels: pixels)
+    }
+}
+
+/// Moves printed ink to correct a printer or roll that prints off-centre (millimetres; +x toward the
+/// label's right end as the designer shows it, +y downward). Applied when printing, never in previews.
+public struct StickerOffset: Codable, Hashable, Sendable {
+    public static let range = -3.0...3.0
+    public var x: Double
+    public var y: Double
+    public init(x: Double = 0, y: Double = 0) {
+        self.x = min(max(x, Self.range.lowerBound), Self.range.upperBound)
+        self.y = min(max(y, Self.range.lowerBound), Self.range.upperBound)
+    }
+}
+
+/// A sticker design printed `settings.copies` times (CLI → app, and the designer window).
+public struct StickerJob: Codable, Sendable {
+    public var design: StickerDesign
+    public var settings: PrintSettings
+    public var source: JobSource
+    /// Print alignment guides for the design's paper instead of its objects.
+    public var alignmentTest: Bool
+
+    public init(design: StickerDesign, settings: PrintSettings, source: JobSource, alignmentTest: Bool = false) {
+        self.design = design
+        self.settings = settings
+        self.source = source
+        self.alignmentTest = alignmentTest
+    }
+
+    private enum CodingKeys: String, CodingKey { case design, settings, source, alignmentTest }
+
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        design = try c.decode(StickerDesign.self, forKey: .design)
+        settings = try c.decode(PrintSettings.self, forKey: .settings)
+        source = try c.decode(JobSource.self, forKey: .source)
+        alignmentTest = try c.decodeIfPresent(Bool.self, forKey: .alignmentTest) ?? false
+    }
+
+    /// The bitmap to print (offset applied) and the renderer's warnings.
+    public func render(offset: StickerOffset = StickerOffset()) throws -> (bitmap: Bitmap, warnings: [String]) {
+        let scale = LabelSize.dpi / 25.4
+        func shift(_ b: Bitmap) -> Bitmap { b.shifted(dx: Int((offset.x * scale).rounded()), dy: Int((offset.y * scale).rounded())) }
+        if alignmentTest {
+            try design.validate()
+            return (shift(StickerDesignRenderer.alignmentTest(size: design.size, shape: design.shape)), [])
+        }
+        guard design.objects.contains(where: \.hasContent) else { throw StickerDesignError.empty }
+        let rendered = try StickerDesignRenderer.render(design)
+        return (shift(rendered.bitmap), rendered.warning?.components(separatedBy: "\n") ?? [])
+    }
+}
+
+/// The designer's saved templates and draft, as stored in LabelBridge's preferences, plus design files.
+public enum StickerLibrary {
+    public static let draftKey = "stickerDesign"
+    public static let templatesKey = "stickerTemplates"
+    /// Names that select the designer's current draft.
+    public static let draftNames: Set<String> = ["draft", "current"]
+
+    public static func savedTemplates(_ defaults: UserDefaults?) throws -> [StickerTemplate] {
+        guard let data = defaults?.data(forKey: templatesKey) else { return [] }
+        return try JSONDecoder().decode([StickerTemplate].self, from: data)
+    }
+
+    public static func draft(_ defaults: UserDefaults?) -> StickerDesign? {
+        defaults?.data(forKey: draftKey).flatMap { try? JSONDecoder().decode(StickerDesign.self, from: $0) }
+    }
+
+    /// Finds a design by template id or name (saved templates first), `draft`, or a path to a JSON file
+    /// holding a design or a template.
+    public static func resolve(_ name: String, defaults: UserDefaults?) throws -> (name: String, design: StickerDesign) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let path = (trimmed as NSString).expandingTildeInPath
+        if trimmed.lowercased().hasSuffix(".json") || trimmed.contains("/") || FileManager.default.fileExists(atPath: path) {
+            guard let data = FileManager.default.contents(atPath: path) else { throw StickerLibraryError.unreadableFile(trimmed, "the file can't be read") }
+            let design: StickerDesign
+            do {
+                if let template = try? JSONDecoder().decode(StickerTemplate.self, from: data) { design = template.design }
+                else { design = try JSONDecoder().decode(StickerDesign.self, from: data) }
+            } catch { throw StickerLibraryError.unreadableFile(trimmed, Self.describe(error)) }
+            try design.validate()
+            return ((trimmed as NSString).lastPathComponent, design)
+        }
+        if draftNames.contains(trimmed.lowercased()) {
+            guard let design = draft(defaults) else { throw StickerLibraryError.noDraft }
+            return ("Draft", design)
+        }
+        let saved = (try? savedTemplates(defaults)) ?? []
+        let all = saved + StickerTemplate.builtIn
+        let key = trimmed.lowercased()
+        if let match = all.first(where: { $0.id == trimmed }) ?? all.first(where: { $0.name.lowercased() == key }) {
+            try match.design.validate()
+            return (match.name, match.design)
+        }
+        throw StickerLibraryError.notFound(trimmed, all.map(\.name))
+    }
+
+    /// Pretty JSON for a design, in the form `resolve` and the app read back.
+    public static func export(_ design: StickerDesign) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(design)
+    }
+
+    static func describe(_ error: Error) -> String {
+        switch error {
+        case DecodingError.dataCorrupted(let c): return c.debugDescription
+        case DecodingError.keyNotFound(let key, let c):
+            return "missing \"\(key.stringValue)\"" + (c.codingPath.isEmpty ? "" : " in \(c.codingPath.map(\.stringValue).joined(separator: "."))")
+        case DecodingError.typeMismatch(_, let c), DecodingError.valueNotFound(_, let c):
+            return "wrong value at \(c.codingPath.map(\.stringValue).joined(separator: "."))"
+        default: return error.localizedDescription
+        }
+    }
+}
+
+public enum StickerLibraryError: LocalizedError {
+    case notFound(String, [String]), noDraft, unreadableFile(String, String)
+
+    public var errorDescription: String? {
+        switch self {
+        case .notFound(let name, let names):
+            return "No template named \"\(name)\". Available: \(names.joined(separator: ", ")). Or use draft, or a .json design file."
+        case .noDraft: return "There is no designer draft yet. Open the sticker designer in LabelBridge first."
+        case .unreadableFile(let path, let reason):
+            return "Can't read the design in \(path): \(reason.hasSuffix(".") ? String(reason.dropLast()) : reason)."
+        }
     }
 }

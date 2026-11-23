@@ -12,6 +12,18 @@ public struct Bitmap: Equatable, Sendable {
     }
 
     public func isBlack(x: Int, y: Int) -> Bool { pixels[y * width + x] }
+
+    /// The same image moved by whole pixels (+dx right, +dy down); ink moved off the edge is dropped.
+    public func shifted(dx: Int, dy: Int) -> Bitmap {
+        guard dx != 0 || dy != 0 else { return self }
+        var out = [Bool](repeating: false, count: pixels.count)
+        for y in 0..<height where (0..<height).contains(y - dy) {
+            for x in 0..<width where (0..<width).contains(x - dx) {
+                out[y * width + x] = pixels[(y - dy) * width + x - dx]
+            }
+        }
+        return Bitmap(width: width, height: height, pixels: out)
+    }
 }
 
 import AppKit

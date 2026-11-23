@@ -29,6 +29,15 @@ struct HelpView: View {
 
     @State private var topic: Topic? = .start
 
+    /// What users paste into an AI assistant's instructions (Help › AI Agents).
+    static let agentInstructions = """
+    To print labels on my NIIMBOT label printer, use the `labelbridge` command:
+    - Text labels: `labelbridge print --json "First label" "Second label"` (one label per argument; \\n inside a label breaks the line).
+    - Stickers: run `labelbridge sticker list` to see the templates, then `labelbridge sticker print --json "TEMPLATE" --text "…" --text "…"`. Each --text fills the template's next text object; for two-circle templates each copy is one pair of circles.
+    - Check first without printing: add `--dry-run`. Preview as PNG: `labelbridge preview …` or `labelbridge sticker preview … --out DIR`.
+    - Run `labelbridge help sticker` for design files and more options.
+    """
+
     var body: some View {
         NavigationSplitView {
             List(Topic.allCases, selection: $topic) { t in
@@ -52,7 +61,7 @@ struct HelpView: View {
     @ViewBuilder private func page(_ t: Topic) -> some View {
         switch t {
         case .start:
-            P("LabelBridge prints labels to a NIIMBOT D11 over Bluetooth, from this app, from the command line, and from any app's Print dialog.")
+            P("LabelBridge prints labels and stickers to a NIIMBOT D11 or D110 over Bluetooth, from this app, from the command line, and from any app's Print dialog.")
             Steps([
                 "Turn the D11 on: hold the power button until the light comes on.",
                 "Disconnect the NIIMBOT phone app. The printer accepts only one Bluetooth connection at a time.",
@@ -74,6 +83,11 @@ struct HelpView: View {
             P("Select a text object and edit its words in **Text content** on the right. You can change the font, bold, italic and alignment. **Auto-fit text** sizes the words to the object; turn it off to set **Font size** from 1–72 pt. The preview warns when the text does not fit.")
             P("Your draft is saved automatically. **Save Template** adds a named design to **My Templates**. Select **Transparent** for transparent rolls; **Print 1 Pair** prints both circles as one feed unit.")
             P("Circle outlines and selection handles never print. The preview uses the same bitmap as printing and warns if ink is outside the sticker or the printer's 12 mm print band.")
+            Text("Alignment").font(.title3.weight(.semibold)).padding(.top, 6)
+            P("To check where your printer puts ink on a sticker roll, click **Print Alignment Test** under **Alignment**. For paired circles it prints a ring and a cross in the middle of each circle; a dot marks the left circle, so hold the sticker the way the designer shows it.")
+            P("If the ring is off-centre, set **Move right** or **Move down** by that much (in mm; negative moves left or up) and print the test again. The offset applies to every sticker you print, from the window and from the command line. Previews don't include it.")
+            Text("From the command line").font(.title3.weight(.semibold)).padding(.top, 6)
+            P("`labelbridge sticker` prints the built-in templates, your saved templates and the current draft. `--text` fills the design's text objects in order. See **Command Line**.")
         case .cli:
             P("The `labelbridge` command prints labels from Terminal and scripts. It talks to LabelBridge, which opens in the background if it isn't running.")
             Code("""
@@ -85,13 +99,28 @@ struct HelpView: View {
             labelbridge status
             labelbridge sizes
             """)
+            Text("Stickers").font(.title3.weight(.semibold)).padding(.top, 6)
+            P("`labelbridge sticker` prints designs from the sticker designer: a template name, `draft` for the design open in the designer, or a `.json` design file. `--text` replaces the design's text objects in order, so one template prints any names or captions.")
+            Code("""
+            labelbridge sticker list                         # templates and the draft
+            labelbridge sticker print "Names" --text "Dana" --text "Yossi"
+            labelbridge sticker print "Icons + text" --text "Oven" --text "Hall"
+            labelbridge sticker print draft --copies 3 --media transparent
+            labelbridge sticker preview "Names" --text "Dana" --out /tmp/stickers
+            labelbridge sticker export "Names" --out names.json   # edit, then:
+            labelbridge sticker print names.json
+            labelbridge sticker icons                        # icon names for .json files
+            labelbridge sticker alignment                    # alignment test print
+            """)
+            P("Save a design with **Save Template** in the designer, and it's available by name from the command line. For two-circle templates, each copy is one pair.")
             Text("Full reference").font(.title3.weight(.semibold)).padding(.top, 6)
             P("This is the built-in help of the installed command (`labelbridge --help`).")
             Code(CLIHelp.text)
         case .agents:
             P("AI assistants that can run shell commands, such as Claude Code, can print labels with `labelbridge`. Add this line to the assistant's instructions (for example `CLAUDE.md`):")
-            Code("To print labels, run `labelbridge print --json` with one label per argument.")
-            P("The JSON result says how many labels printed, and the exit code says what went wrong: 3 means the printer is off or busy, 5 means LabelBridge couldn't be reached.")
+            Code(Self.agentInstructions)
+            P("The JSON result says how many labels or stickers printed, and the exit code says what went wrong: 2 means bad input (for example an unknown template), 3 means the printer is off or busy, 5 means LabelBridge couldn't be reached.")
+            P("Your saved sticker templates are available to the assistant by name, so you can design a sticker once and ask it to print it with different text.")
             P("Some assistants run commands in a sandbox. If you get exit code **5**, allow access to `~/Library/Application Support/LabelBridge/` and to opening apps, or run the command outside the sandbox.")
         case .dialog:
             P("In any app, choose **File › Print**, pick **NIIMBOT D11 (Bluetooth)**, and choose a label size under **Paper Size**. Each page becomes one label, fitted and centred.")
@@ -185,7 +214,8 @@ private struct Code: View {
 enum CLIHelp {
     static let text: String = {
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/labelbridge")
-        let parts = [["--help"], ["help", "print"], ["help", "preview"]].map { run(helper, $0) }
+        let parts = [["--help"], ["help", "print"], ["help", "preview"], ["help", "sticker"], ["help", "sticker", "print"],
+                     ["help", "sticker", "export"]].map { run(helper, $0) }
         let joined = parts.compactMap { $0 }.joined(separator: "\n\n────────────────────────────────────────\n\n")
         return joined.isEmpty ? "Run `labelbridge --help` in Terminal." : joined
     }()

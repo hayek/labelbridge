@@ -72,6 +72,17 @@ public actor JobQueue {
         return result
     }
 
+    /// Renders and prints a sticker design (`copies` times). `offset` corrects where the printer puts ink.
+    public func submit(_ job: StickerJob, offset: StickerOffset = StickerOffset(), progress: @escaping Progress) async -> JobResult {
+        let rendered: (bitmap: Bitmap, warnings: [String])
+        do { rendered = try job.render(offset: offset) } catch {
+            return JobResult(ok: false, printed: 0, total: 0, error: error.localizedDescription, failure: .badInput)
+        }
+        var result = await submit(bitmaps: [rendered.bitmap], settings: job.settings, progress: progress)
+        result.warnings = rendered.warnings + result.warnings
+        return result
+    }
+
     /// Prints pre-rendered labels (used for Print-dialog jobs). Waits for earlier jobs to finish first.
     public func submit(bitmaps: [Bitmap], settings: PrintSettings, progress: @escaping Progress) async -> JobResult {
         let previous = tail

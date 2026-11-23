@@ -15,6 +15,7 @@ public struct StatusInfo: Codable, Sendable {
 public enum IPCRequest: Codable, Sendable {
     case print(LabelJob)
     case status
+    case printSticker(StickerJob)
 }
 
 /// App → CLI. A print request gets zero or more `progress` messages, then one `result`.

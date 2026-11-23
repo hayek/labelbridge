@@ -12,6 +12,9 @@ enum IPCService {
                 case .print(let job):
                     let result = await PrintService.shared.print(job) { done, total in send(.progress(done, total)) }
                     send(.result(result))
+                case .printSticker(let job):
+                    let result = await PrintService.shared.print(job) { done, total in send(.progress(done, total)) }
+                    send(.result(result))
                 case .status:
                     let info = await MainActor.run { () -> StatusInfo in
                         let s = PrintService.shared

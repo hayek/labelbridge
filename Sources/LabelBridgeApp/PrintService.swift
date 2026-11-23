@@ -87,6 +87,12 @@ final class PrintService: ObservableObject {
         await track { await self.queue.submit(job, progress: self.progressHandler(onProgress)) }
     }
 
+    /// Sticker designs from the designer and the CLI; the print offset from Settings is applied here.
+    func print(_ job: StickerJob, onProgress: (@Sendable (Int, Int) -> Void)? = nil) async -> JobResult {
+        let offset = Settings.stickerOffset
+        return await track { await self.queue.submit(job, offset: offset, progress: self.progressHandler(onProgress)) }
+    }
+
     func print(bitmaps: [Bitmap], settings: PrintSettings) async -> JobResult {
         await track { await self.queue.submit(bitmaps: bitmaps, settings: settings, progress: self.progressHandler()) }
     }

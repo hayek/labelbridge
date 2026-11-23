@@ -22,6 +22,11 @@ enum Settings {
         get { d.string(forKey: "media").flatMap(LabelMedia.init(rawValue:)) ?? .gaps }
         set { d.set(newValue.rawValue, forKey: "media") }
     }
+    /// Where sticker ink lands relative to the design (mm), set from an alignment test print.
+    static var stickerOffset: StickerOffset {
+        get { StickerOffset(x: d.double(forKey: "stickerOffsetX"), y: d.double(forKey: "stickerOffsetY")) }
+        set { d.set(newValue.x, forKey: "stickerOffsetX"); d.set(newValue.y, forKey: "stickerOffsetY") }
+    }
     static var layout: LabelLayout {
         get { d.string(forKey: "layout").flatMap(LabelLayout.init(rawValue:)) ?? .text }
         set { d.set(newValue.rawValue, forKey: "layout") }

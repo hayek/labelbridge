@@ -25,8 +25,8 @@ public struct TextStyle: Codable, Hashable, Sendable {
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         fontName = try values.decodeIfPresent(String.self, forKey: .fontName)
-        bold = try values.decode(Bool.self, forKey: .bold)
-        alignment = try values.decode(Alignment.self, forKey: .alignment)
+        bold = try values.decodeIfPresent(Bool.self, forKey: .bold) ?? false
+        alignment = try values.decodeIfPresent(Alignment.self, forKey: .alignment) ?? .center
         italic = try values.decodeIfPresent(Bool.self, forKey: .italic) ?? false
         fontSizePoints = try values.decodeIfPresent(Double.self, forKey: .fontSizePoints)
         try validate()

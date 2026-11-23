@@ -18,10 +18,18 @@ struct LabelBridgeCLI: ParsableCommand {
           labelbridge print --json "Spices\\nTop shelf"
           labelbridge preview "Dana" --out /tmp/labels
 
+        STICKERS (designs from the app's sticker designer):
+          labelbridge sticker list
+          labelbridge sticker print "Names" --text "Dana" --text "Yossi"
+          labelbridge sticker print draft --copies 2
+          See `labelbridge help sticker`.
+
         FOR AI AGENTS:
           Add to the agent's instructions:
           "To print labels, run `labelbridge print --json`
-           with one label per argument."
+           with one label per argument. For stickers, run
+           `labelbridge sticker list`, then
+           `labelbridge sticker print --json TEMPLATE --text …`."
 
         EXIT CODES:
           0  printed
@@ -30,7 +38,7 @@ struct LabelBridgeCLI: ParsableCommand {
           4  printing failed (the JSON says how many labels printed)
           5  LabelBridge.app not available
         """,
-        subcommands: [Print.self, Preview.self, Status.self, Sizes.self],
+        subcommands: [Print.self, Preview.self, Sticker.self, Status.self, Sizes.self],
         defaultSubcommand: Print.self)
 }
 
@@ -70,6 +78,13 @@ struct LabelOptions: ParsableArguments {
             return v
         } ?? d?.string(forKey: "alignment").flatMap(Alignment.init(rawValue:)) ?? .center
         let style = TextStyle(fontName: font ?? d?.string(forKey: "fontName"), bold: bold || (d?.bool(forKey: "bold") ?? false), alignment: alignment)
+        return LabelJob(items: try lines(), size: labelSize, style: style,
+                        settings: try Self.settings(density: density, media: media, copies: copies), source: .cli)
+    }
+
+    /// Darkness, media and copies, falling back to the app's settings.
+    static func settings(density: Int?, media: String?, copies: Int) throws -> PrintSettings {
+        let d = appDefaults
         let dens = density ?? (d?.object(forKey: "density") as? Int) ?? 3
         guard (1...5).contains(dens) else { throw ValidationError("--density must be 1–5.") }
         guard (1...99).contains(copies) else { throw ValidationError("--copies must be 1–99.") }
@@ -80,7 +95,43 @@ struct LabelOptions: ParsableArguments {
         } else {
             labelMedia = d?.string(forKey: "media").flatMap(LabelMedia.init(rawValue:)) ?? .gaps
         }
-        return LabelJob(items: try lines(), size: labelSize, style: style, settings: PrintSettings(density: dens, copies: copies, media: labelMedia), source: .cli)
+        return PrintSettings(density: dens, copies: copies, media: labelMedia)
+    }
+}
+
+/// Writes a JobResult as JSON or text and exits with its exit code.
+func finishJob(_ r: JobResult, json: Bool, unit: String, dryRun: Bool) -> Never {
+    if json {
+        let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        print(String(data: try! enc.encode(r), encoding: .utf8)!)
+    } else {
+        for w in r.warnings { FileHandle.standardError.write(Data("warning: \(w)\n".utf8)) }
+        func count(_ n: Int) -> String { "\(n) \(unit)\(n == 1 ? "" : "s")" }
+        if r.ok {
+            print(dryRun ? "OK: \(count(r.total)) would print" + (r.skipped > 0 ? " (\(r.skipped) blank skipped)" : "")
+                         : "Printed \(count(r.printed))")
+        } else { FileHandle.standardError.write(Data("error: \(r.error ?? "failed")\n".utf8)) }
+    }
+    Foundation.exit(ExitCode.for(r))
+}
+
+/// Sends a job to the app and waits for its result, reporting progress on stderr.
+func sendJob(_ request: IPCRequest, json: Bool, unit: String) -> JobResult {
+    var lastProgress = (done: 0, total: 0)
+    do {
+        let message = try AppConnection.send(request) { done, total in
+            lastProgress = (done, total)
+            if !json { FileHandle.standardError.write(Data("Printing \(unit) \(done) of \(total)…\n".utf8)) }
+        }
+        guard case .result(let r) = message else { throw IPCError.closed }
+        return r
+    } catch IPCError.notRunning {
+        return JobResult(ok: false, printed: 0, total: 0, error: AppConnection.unavailableMessage, failure: .appUnavailable)
+    } catch {
+        // The app received the job but went away (quit or crashed) before answering.
+        let printed = lastProgress.done            // progress is reported after each label finishes
+        return JobResult(ok: false, printed: printed, total: lastProgress.total,
+                         error: "LabelBridge stopped while printing, after \(printed) of \(lastProgress.total) labels.", failure: .failedMidJob)
     }
 }
 
@@ -105,22 +156,7 @@ struct Print: ParsableCommand {
         if Batch.items(from: job.items).items.isEmpty {
             finish(JobResult(ok: false, printed: 0, total: 0, error: "No labels to print.", failure: .badInput))
         }
-        var lastProgress = (done: 0, total: 0)
-        do {
-            let message = try AppConnection.send(.print(job)) { done, total in
-                lastProgress = (done, total)
-                if !json { FileHandle.standardError.write(Data("Printing label \(done) of \(total)…\n".utf8)) }
-            }
-            guard case .result(let r) = message else { throw IPCError.closed }
-            finish(r)
-        } catch IPCError.notRunning {
-            finish(JobResult(ok: false, printed: 0, total: 0, error: AppConnection.unavailableMessage, failure: .appUnavailable))
-        } catch {
-            // The app received the job but went away (quit or crashed) before answering.
-            let printed = lastProgress.done            // progress is reported after each label finishes
-            finish(JobResult(ok: false, printed: printed, total: lastProgress.total,
-                             error: "LabelBridge stopped while printing, after \(printed) of \(lastProgress.total) labels.", failure: .failedMidJob))
-        }
+        finish(sendJob(.print(job), json: json, unit: "label"))
     }
 
     private func dryRunResult(_ job: LabelJob) -> JobResult {
@@ -131,17 +167,7 @@ struct Print: ParsableCommand {
                          failure: parsed.items.isEmpty ? .badInput : nil)
     }
 
-    private func finish(_ r: JobResult) -> Never {
-        if json {
-            let enc = JSONEncoder(); enc.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-            print(String(data: try! enc.encode(r), encoding: .utf8)!)
-        } else {
-            for w in r.warnings { FileHandle.standardError.write(Data("warning: \(w)\n".utf8)) }
-            if r.ok { print(dryRun ? "OK: \(r.total) labels would print" + (r.skipped > 0 ? " (\(r.skipped) blank skipped)" : "") : "Printed \(r.printed) labels") }
-            else { FileHandle.standardError.write(Data("error: \(r.error ?? "failed")\n".utf8)) }
-        }
-        Foundation.exit(ExitCode.for(r))
-    }
+    private func finish(_ r: JobResult) -> Never { finishJob(r, json: json, unit: "label", dryRun: dryRun) }
 }
 
 struct Preview: ParsableCommand {
