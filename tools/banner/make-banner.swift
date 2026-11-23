@@ -55,13 +55,19 @@ let tImage = NSImage(size: tSize, flipped: true) { r in
 }
 tImage.draw(in: NSRect(x: left - 6, y: 140, width: tSize.width, height: tSize.height), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
 
-// Subtitle
+// Subtitle, two lines so the printer names stay clear of the photo.
 let grey = NSColor(white: 0.70, alpha: 1)
-let sub = NSMutableAttributedString()
-for (text, strong) in [("Print labels to a ", false), ("NIIMBOT D11", true), (" from your Mac, ", false), ("over Bluetooth", true), (".", false)] {
-    sub.append(NSAttributedString(string: text, attributes: [.font: font(36, strong ? .bold : .medium), .foregroundColor: strong ? NSColor.white : grey, .kern: -0.6]))
+let subtitle: [[(String, Bool)]] = [
+    [("Print labels to a ", false), ("NIIMBOT D11 or D110", true)],
+    [("from your Mac, ", false), ("over Bluetooth", true), (".", false)],
+]
+for (line, parts) in subtitle.enumerated() {
+    let sub = NSMutableAttributedString()
+    for (text, strong) in parts {
+        sub.append(NSAttributedString(string: text, attributes: [.font: font(36, strong ? .bold : .medium), .foregroundColor: strong ? NSColor.white : grey, .kern: -0.6]))
+    }
+    draw(sub, at: NSPoint(x: left, y: 340 + CGFloat(line) * 48))
 }
-draw(sub, at: NSPoint(x: left, y: 340))
 
 // Features, 2 x 2
 let features: [(String, String)] = [
@@ -72,7 +78,7 @@ let features: [(String, String)] = [
 ]
 let orange = NSColor(red: 1.0, green: 0.72, blue: 0.45, alpha: 1)
 for (i, f) in features.enumerated() {
-    let x = left + CGFloat(i % 2) * 450, y = 450 + CGFloat(i / 2) * 82
+    let x = left + CGFloat(i % 2) * 450, y = 490 + CGFloat(i / 2) * 82
     let tile = NSRect(x: x, y: y, width: 56, height: 56)
     NSColor(white: 1, alpha: 0.07).setFill(); NSBezierPath(roundedRect: tile, xRadius: 13, yRadius: 13).fill()
     NSColor(white: 1, alpha: 0.12).setStroke(); let b = NSBezierPath(roundedRect: tile.insetBy(dx: 0.5, dy: 0.5), xRadius: 13, yRadius: 13); b.lineWidth = 1; b.stroke()
@@ -88,7 +94,7 @@ for (i, f) in features.enumerated() {
 // Real labels rendered by LabelBridge, as white stickers (15 x 50 mm; 12 mm print band centred).
 let files = (try! FileManager.default.contentsOfDirectory(atPath: labelsDir)).filter { $0.hasSuffix(".png") }.sorted()
 let lw: CGFloat = 400, lh = lw * 15 / 50
-let spots: [(CGFloat, CGFloat, CGFloat)] = [(left, 690, -2.5), (left + 430, 676, 2.0), (left + 18, 840, 1.5), (left + 450, 830, -1.8)]
+let spots: [(CGFloat, CGFloat, CGFloat)] = [(left, 715, -2.5), (left + 430, 701, 2.0), (left + 18, 860, 1.5), (left + 450, 850, -1.8)]
 for (i, file) in files.prefix(4).enumerated() {
     let img = NSImage(contentsOfFile: labelsDir + "/" + file)!
     let (x, y, angle) = spots[i]
