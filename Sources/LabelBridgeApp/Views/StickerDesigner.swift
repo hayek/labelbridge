@@ -232,7 +232,7 @@ struct StickerDesigner: View {
                 } footer: {
                     Text(store.design.shape == .twoCircles
                          ? "The test prints a ring and a cross in the middle of each circle. If they're off-centre, move the print by that much and test again."
-                         : "The test prints an outline 1 mm inside the label and a cross in the middle. If it's off-centre, move the print by that much and test again.")
+                         : "The test prints a cross in the middle and an outline around the printable area: 1 mm in from each end, and the edges of the 12 mm print band. If the cross is off-centre, move the print by that much and test again.")
                         .font(.caption).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }

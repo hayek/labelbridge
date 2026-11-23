@@ -14,6 +14,14 @@ public struct LabelSize: Codable, Hashable, Sendable, CustomStringConvertible {
         self.lengthMM = max(widthMM, lengthMM)
     }
 
+    private enum CodingKeys: String, CodingKey { case widthMM, lengthMM }
+
+    /// Like `init`, the short side is the width whichever way round the values are written.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(try c.decode(Double.self, forKey: .widthMM), try c.decode(Double.self, forKey: .lengthMM))
+    }
+
     public static let defaultSize = LabelSize(15, 50)
     public static let builtIn: [LabelSize] = [
         LabelSize(15, 50), LabelSize(12, 40), LabelSize(14, 40), LabelSize(15, 30),

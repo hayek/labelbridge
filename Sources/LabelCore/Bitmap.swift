@@ -13,6 +13,9 @@ public struct Bitmap: Equatable, Sendable {
 
     public func isBlack(x: Int, y: Int) -> Bool { pixels[y * width + x] }
 
+    /// Number of black pixels.
+    public var inkCount: Int { pixels.reduce(0) { $0 + ($1 ? 1 : 0) } }
+
     /// The same image moved by whole pixels (+dx right, +dy down); ink moved off the edge is dropped.
     public func shifted(dx: Int, dy: Int) -> Bitmap {
         guard dx != 0 || dy != 0 else { return self }

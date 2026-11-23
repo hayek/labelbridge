@@ -41,6 +41,8 @@ final class StickerDesignStore: ObservableObject {
         }
         self.design = design
         savedTemplates = templates
+        // Save the starting design so `labelbridge sticker print draft` works before the first edit.
+        if defaults.data(forKey: StickerLibrary.draftKey) == nil { persistDesign() }
         self.error = errors.isEmpty ? nil : errors.joined(separator: "\n")
         for message in errors { Log.write(message) }
     }

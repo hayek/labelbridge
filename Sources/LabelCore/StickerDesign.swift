@@ -83,6 +83,10 @@ extension StickerContent: Codable {
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: Keys.self)
+        if c.contains(.text) && c.contains(.icon) {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath,
+                debugDescription: #"An object's content has both "text" and "icon"; use one per object."#))
+        }
         if c.contains(.text) {
             if let text = try? c.decode(String.self, forKey: .text) { self = .text(text); return }
             self = .text(try c.nestedContainer(keyedBy: Legacy.self, forKey: .text).decode(String.self, forKey: ._0))
@@ -160,6 +164,14 @@ public struct StickerDesign: Codable, Hashable, Sendable {
         objects.compactMap { if case .text(let text) = $0.content { return text } else { return nil } }
     }
 
+    /// A warning when some text objects keep the design's own text because fewer texts were given.
+    public func unfilledTextWarning(given: Int) -> String? {
+        let slots = textSlots
+        guard given > 0, given < slots.count else { return nil }
+        let kept = slots.dropFirst(given).map { "\"\($0.replacingOccurrences(of: "\n", with: "\\n"))\"" }.joined(separator: ", ")
+        return "The design has \(slots.count) text objects but \(given) --text \(given == 1 ? "was" : "were") given; the rest keep their text: \(kept)."
+    }
+
     /// Replaces the text of the first `texts.count` text objects, in order; the rest keep their text.
     public func fillingText(_ texts: [String]) throws -> StickerDesign {
         let slots = objects.indices.filter { if case .text = objects[$0].content { return true } else { return false } }
@@ -176,9 +188,10 @@ public struct StickerDesign: Codable, Hashable, Sendable {
               (4...200).contains(size.widthMM), (4...200).contains(size.lengthMM),
               size.widthMM <= size.lengthMM,
               shape != .twoCircles || size == LabelSize(14, 28),
-              objects.count <= 100, Set(objects.map(\.id)).count == objects.count else {
+              objects.count <= 100 else {
             throw StickerDesignError.invalidGeometry
         }
+        guard Set(objects.map(\.id)).count == objects.count else { throw StickerDesignError.duplicateIDs }
         for object in objects {
             try object.style.validate()
             let f = object.frame
@@ -229,7 +242,7 @@ public struct StickerTemplate: Identifiable, Codable, Hashable, Sendable {
 }
 
 public enum StickerDesignError: LocalizedError {
-    case invalidGeometry, unavailableIcon(String), tooManyTexts(given: Int, slots: Int), empty
+    case invalidGeometry, unavailableIcon(String), tooManyTexts(given: Int, slots: Int), empty, duplicateIDs
 
     public var errorDescription: String? {
         switch self {
@@ -238,6 +251,7 @@ public enum StickerDesignError: LocalizedError {
         case .tooManyTexts(let given, let slots):
             return "Got \(given) texts, but the design has \(slots) text \(slots == 1 ? "object" : "objects")."
         case .empty: return "The design is empty. Add text or an icon first."
+        case .duplicateIDs: return "Two objects in the design have the same \"id\". Give each object its own id, or leave the ids out."
         }
     }
 }
@@ -302,7 +316,8 @@ public enum StickerDesignRenderer {
 
     /// Guides for checking where the printer puts ink on a roll: for paired circles, a 11 mm ring and a
     /// cross at each circle's centre, with a dot in the left circle so the print can be held the way
-    /// the designer shows it. For rectangles, an outline 1 mm inside the label ends and the print band.
+    /// the designer shows it. For rectangles, a cross at the centre and an outline around the printable
+    /// area: 1 mm in from each end, and the edges of the 12 mm print band.
     public static func alignmentTest(size: LabelSize, shape: StickerShape) -> Bitmap {
         let scale = LabelSize.dpi / 25.4
         let (width, height) = size.canvasPixels
@@ -321,7 +336,9 @@ public enum StickerDesignRenderer {
                     let dot = cx < size.lengthMM / 2 && (x - cx) * (x - cx) + (y - centreY + 3) * (y - centreY + 3) <= 0.36
                     ink = ring || cross || dot
                 } else {
-                    let top = Double(bandTop) / scale + 0.5, bottom = Double(bandTop + height) / scale - 0.5
+                    // The printable area: 1 mm in from each end, and the print band (or the label, if narrower).
+                    let top = max(Double(bandTop) / scale, 0) + line / 2
+                    let bottom = min(Double(bandTop + height) / scale, size.widthMM) - line / 2
                     let left = 1.0, right = size.lengthMM - 1
                     let inside = x >= left - line / 2 && x <= right + line / 2 && y >= top - line / 2 && y <= bottom + line / 2
                     let edge = abs(x - left) <= line / 2 || abs(x - right) <= line / 2 || abs(y - top) <= line / 2 || abs(y - bottom) <= line / 2
@@ -403,16 +420,23 @@ public struct StickerJob: Codable, Sendable {
 
     /// The bitmap to print (offset applied) and the renderer's warnings.
     public func render(offset: StickerOffset = StickerOffset()) throws -> (bitmap: Bitmap, warnings: [String]) {
-        let scale = LabelSize.dpi / 25.4
-        func shift(_ b: Bitmap) -> Bitmap { b.shifted(dx: Int((offset.x * scale).rounded()), dy: Int((offset.y * scale).rounded())) }
+        let base: Bitmap, warnings: [String]
         if alignmentTest {
             try design.validate()
-            return (shift(StickerDesignRenderer.alignmentTest(size: design.size, shape: design.shape)), [])
+            (base, warnings) = (StickerDesignRenderer.alignmentTest(size: design.size, shape: design.shape), [])
+        } else {
+            guard design.objects.contains(where: \.hasContent) else { throw StickerDesignError.empty }
+            let rendered = try StickerDesignRenderer.render(design)
+            (base, warnings) = (rendered.bitmap, rendered.warning?.components(separatedBy: "\n") ?? [])
         }
-        guard design.objects.contains(where: \.hasContent) else { throw StickerDesignError.empty }
-        let rendered = try StickerDesignRenderer.render(design)
-        return (shift(rendered.bitmap), rendered.warning?.components(separatedBy: "\n") ?? [])
+        let scale = LabelSize.dpi / 25.4
+        let shifted = base.shifted(dx: Int((offset.x * scale).rounded()), dy: Int((offset.y * scale).rounded()))
+        guard shifted.inkCount < base.inkCount else { return (shifted, warnings) }
+        let side = offset.y != 0 ? "the 12 mm print band" : "the label"
+        return (shifted, warnings + ["The print offset (\(Self.mm(offset.x)) right, \(Self.mm(offset.y)) down) moves some ink outside \(side), so it won't print."])
     }
+
+    private static func mm(_ v: Double) -> String { "\(v.formatted(.number.precision(.fractionLength(0...2)))) mm" }
 }
 
 /// The designer's saved templates and draft, as stored in LabelBridge's preferences, plus design files.
@@ -424,40 +448,65 @@ public enum StickerLibrary {
 
     public static func savedTemplates(_ defaults: UserDefaults?) throws -> [StickerTemplate] {
         guard let data = defaults?.data(forKey: templatesKey) else { return [] }
-        return try JSONDecoder().decode([StickerTemplate].self, from: data)
+        do { return try JSONDecoder().decode([StickerTemplate].self, from: data) }
+        catch { throw StickerLibraryError.unreadableTemplates(describe(error)) }
     }
 
-    public static func draft(_ defaults: UserDefaults?) -> StickerDesign? {
-        defaults?.data(forKey: draftKey).flatMap { try? JSONDecoder().decode(StickerDesign.self, from: $0) }
+    /// The designer's draft; nil when there is none, an error when it can't be read.
+    public static func draft(_ defaults: UserDefaults?) throws -> StickerDesign? {
+        guard let data = defaults?.data(forKey: draftKey) else { return nil }
+        do { return try JSONDecoder().decode(StickerDesign.self, from: data) }
+        catch { throw StickerLibraryError.unreadableDraft(describe(error)) }
     }
 
-    /// Finds a design by template id or name (saved templates first), `draft`, or a path to a JSON file
-    /// holding a design or a template.
+    /// True for arguments that name a design file rather than a template: a .json path or any path with a `/`.
+    public static func isFilePath(_ name: String) -> Bool {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.lowercased().hasSuffix(".json") || n.contains("/") || n.hasPrefix("~")
+    }
+
+    /// Finds a design. Order: a design file (`*.json`, or a path containing `/`); your saved templates by
+    /// name (any capitalisation; the most recently saved wins) or id; `draft`/`current`; built-in templates
+    /// by name or id. A template name that looks like a path can still be printed by its id.
     public static func resolve(_ name: String, defaults: UserDefaults?) throws -> (name: String, design: StickerDesign) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let path = (trimmed as NSString).expandingTildeInPath
-        if trimmed.lowercased().hasSuffix(".json") || trimmed.contains("/") || FileManager.default.fileExists(atPath: path) {
-            guard let data = FileManager.default.contents(atPath: path) else { throw StickerLibraryError.unreadableFile(trimmed, "the file can't be read") }
-            let design: StickerDesign
-            do {
-                if let template = try? JSONDecoder().decode(StickerTemplate.self, from: data) { design = template.design }
-                else { design = try JSONDecoder().decode(StickerDesign.self, from: data) }
-            } catch { throw StickerLibraryError.unreadableFile(trimmed, Self.describe(error)) }
-            try design.validate()
-            return ((trimmed as NSString).lastPathComponent, design)
-        }
-        if draftNames.contains(trimmed.lowercased()) {
-            guard let design = draft(defaults) else { throw StickerLibraryError.noDraft }
-            return ("Draft", design)
-        }
-        let saved = (try? savedTemplates(defaults)) ?? []
-        let all = saved + StickerTemplate.builtIn
+        if isFilePath(trimmed) { return try load(file: trimmed) }
         let key = trimmed.lowercased()
-        if let match = all.first(where: { $0.id == trimmed }) ?? all.first(where: { $0.name.lowercased() == key }) {
+        let savedResult = Result { try savedTemplates(defaults) }
+        let saved = ((try? savedResult.get()) ?? []).reversed()         // newest first
+        if let match = saved.first(where: { $0.name.lowercased() == key }) ?? saved.first(where: { $0.id == trimmed }) {
             try match.design.validate()
             return (match.name, match.design)
         }
-        throw StickerLibraryError.notFound(trimmed, all.map(\.name))
+        if draftNames.contains(key) {
+            guard let design = try draft(defaults) else { throw StickerLibraryError.noDraft }
+            try design.validate()
+            return ("Draft", design)
+        }
+        let builtIn = StickerTemplate.builtIn
+        if let match = builtIn.first(where: { $0.name.lowercased() == key || $0.id.lowercased() == key }) {
+            return (match.name, match.design)
+        }
+        if case .failure(let error) = savedResult { throw error }      // it may have been one of those
+        throw StickerLibraryError.notFound(trimmed, saved.reversed().map(\.name) + builtIn.map(\.name))
+    }
+
+    private static func load(file: String) throws -> (name: String, design: StickerDesign) {
+        let path = (file as NSString).expandingTildeInPath
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), !isDirectory.boolValue,
+              let data = FileManager.default.contents(atPath: path) else {
+            throw StickerLibraryError.unreadableFile(file, "there's no readable file at that path")
+        }
+        let design: StickerDesign
+        do {
+            // A template file ({id, name, design}) or a bare design; report errors for the form it is.
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            if object?["design"] != nil { design = try JSONDecoder().decode(StickerTemplate.self, from: data).design }
+            else { design = try JSONDecoder().decode(StickerDesign.self, from: data) }
+        } catch { throw StickerLibraryError.unreadableFile(file, describe(error)) }
+        try design.validate()
+        return ((file as NSString).lastPathComponent, design)
     }
 
     /// Pretty JSON for a design, in the form `resolve` and the app read back.
@@ -480,13 +529,17 @@ public enum StickerLibrary {
 }
 
 public enum StickerLibraryError: LocalizedError {
-    case notFound(String, [String]), noDraft, unreadableFile(String, String)
+    case notFound(String, [String]), noDraft, unreadableFile(String, String), unreadableDraft(String), unreadableTemplates(String)
 
     public var errorDescription: String? {
         switch self {
         case .notFound(let name, let names):
             return "No template named \"\(name)\". Available: \(names.joined(separator: ", ")). Or use draft, or a .json design file."
-        case .noDraft: return "There is no designer draft yet. Open the sticker designer in LabelBridge first."
+        case .noDraft: return "There is no designer draft yet. Open the sticker designer in LabelBridge (version 1.0.5 or later) first."
+        case .unreadableTemplates(let reason):
+            return "Can't read your saved sticker templates: \(reason.hasSuffix(".") ? String(reason.dropLast()) : reason). Built-in templates and .json files still work."
+        case .unreadableDraft(let reason):
+            return "Can't read the sticker designer's draft: \(reason.hasSuffix(".") ? String(reason.dropLast()) : reason). Open the designer and pick a template to replace it."
         case .unreadableFile(let path, let reason):
             return "Can't read the design in \(path): \(reason.hasSuffix(".") ? String(reason.dropLast()) : reason)."
         }

@@ -128,7 +128,13 @@ func sendJob(_ request: IPCRequest, json: Bool, unit: String) -> JobResult {
     } catch IPCError.notRunning {
         return JobResult(ok: false, printed: 0, total: 0, error: AppConnection.unavailableMessage, failure: .appUnavailable)
     } catch {
-        // The app received the job but went away (quit or crashed) before answering.
+        // The app went away (quit or crashed) before answering. With no progress at all, it may also be an
+        // older LabelBridge that doesn't know this request: nothing was printed.
+        guard lastProgress.total > 0 else {
+            return JobResult(ok: false, printed: 0, total: 0,
+                             error: "LabelBridge closed the connection before printing anything. If an older version is running, quit and reopen LabelBridge, then try again.",
+                             failure: .appUnavailable)
+        }
         let printed = lastProgress.done            // progress is reported after each label finishes
         return JobResult(ok: false, printed: printed, total: lastProgress.total,
                          error: "LabelBridge stopped while printing, after \(printed) of \(lastProgress.total) labels.", failure: .failedMidJob)

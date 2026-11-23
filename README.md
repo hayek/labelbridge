@@ -53,7 +53,7 @@ The circular template is two **14 mm circles** on a **14 × 28 mm** feed unit. E
 
 The current draft is saved automatically on this Mac. **Save Template** adds a named design to **My Templates**, ready to reuse, also from the command line (see [Print stickers from the command line](#print-stickers-from-the-command-line)). Undo and redo cover template changes, object edits, moves and resizing. The original one-label-per-line workflow remains under **Text batch**. Print-dialog jobs always print as text-batch labels.
 
-**Alignment:** to check where your printer puts ink on a sticker roll, click **Print Alignment Test** under **Alignment** in the inspector. For paired circles, it prints a ring and a cross in the middle of each circle, with a dot marking the left one. If they're off-centre, set **Move right** or **Move down** (in mm; negative values move left or up) and test again. The offset applies to every sticker printed, from the window and from the command line.
+**Alignment:** to check where your printer puts ink on a sticker roll, click **Print Alignment Test** under **Alignment** in the inspector. For paired circles, it prints a ring and a cross in the middle of each circle, with a dot marking the left one. If they're off-centre, set **Move right** or **Move down** (in mm; negative values move left or up) and test again. The offset applies to every sticker printed, from the window and from the command line. The printer only prints within its 12 mm band, so a vertical offset puts ink near the band's edge out of reach; LabelBridge warns when that happens.
 
 ## Print from the command line
 
@@ -73,15 +73,17 @@ labelbridge sizes                                 # built-in label sizes
 
 ### Print stickers from the command line
 
-`labelbridge sticker` prints sticker designs: a built-in or saved template (by name or id), `draft` for the design open in the designer, or a `.json` design file. `--text` replaces the design's text objects in order, so one template prints any names or captions.
+`labelbridge sticker` prints sticker designs: one of your saved templates or a built-in one (by name in any capitalisation, or by the id `sticker list` shows), `draft` for the design open in the designer, or a `.json` design file (any argument ending in `.json` or containing `/`). If you saved a template twice under one name, the newest is used.
+
+`--text` replaces the design's text objects in order, so one template prints any names or captions. Give one `--text` per text object; `sticker list` shows them in quotes. Any you leave out keep the template's own text, with a warning.
 
 ```sh
 labelbridge sticker list                                    # templates, your saved ones, and the draft
 labelbridge sticker print "Names" --text "Oliver" --text "Emily"
 labelbridge sticker print "Icons + text" --text "Kitchen" --text "Hallway" --media transparent
 labelbridge sticker print draft --copies 3                  # two-circle designs: one copy = one pair
-labelbridge sticker print --json --dry-run "Names" --text "Oliver"
-labelbridge sticker preview "Names" --text "Oliver" --out /tmp/stickers   # PNG, no printer needed
+labelbridge sticker print --json --dry-run "Names" --text "Oliver" --text "Emily"
+labelbridge sticker preview "Names" --text "Oliver" --text "Emily" --out /tmp/stickers   # PNG, no printer needed
 labelbridge sticker export "Icons + text" --out kitchen.json               # edit, then:
 labelbridge sticker print kitchen.json
 labelbridge sticker icons                                   # icon names for design files
@@ -241,11 +243,16 @@ OPTIONS:
 OVERVIEW: Print sticker designs: templates, the designer's draft, or a .json
 design file.
 
-A DESIGN is a template name or id (`labelbridge sticker list`), `draft` for the
-design open in the app's sticker designer, or the path of a .json design file
-(`labelbridge sticker export` writes one to start from). Use --text to fill the
-design's text objects in order, for example the two circles of the "Names"
-template.
+A DESIGN is one of, in this order: a .json design file (any argument ending in
+.json or containing /); one of your saved templates, by name in any
+capitalisation (the most recently saved wins) or by id; `draft` for the design
+open in the app's sticker designer; or a built-in template, by name or id.
+`labelbridge sticker list` shows names and ids.
+
+--text fills the design's text objects in order: give one --text per text
+object (`sticker list` shows them). Text objects without a --text keep the
+template's own text, with a warning. `labelbridge sticker export` writes a
+design file to start from.
 
 EXAMPLES:
   labelbridge sticker list
@@ -265,7 +272,8 @@ OPTIONS:
   -h, --help              Show help information.
 
 SUBCOMMANDS:
-  list                    List sticker templates and the designer's draft.
+  list                    List sticker templates and the designer's draft, with
+                          their text objects.
   print                   Print a sticker design.
   preview                 Write a sticker design as a PNG without printing.
   export                  Write a design as JSON, to edit and print with
@@ -282,8 +290,9 @@ OVERVIEW: Print a sticker design.
 
 Prints the design --copies times and waits until done. For the two-circle
 templates, one copy is one pair. With --json, prints {"ok", "printed", "total",
-"warnings", "error"} to stdout. Exit codes are the same as `labelbridge print`.
-The app's print offset (sticker designer › Alignment) is applied.
+"skipped", "warnings", "error", "failure"} to stdout. Exit codes are the same
+as `labelbridge print`. The app's print offset (sticker designer › Alignment)
+is applied.
 
 USAGE: labelbridge sticker print <design> [--text <text> ...] [--copies <copies>] [--density <density>] [--media <media>] [--dry-run] [--json]
 
@@ -291,8 +300,8 @@ ARGUMENTS:
   <design>                Template name or id, `draft`, or a .json design file.
 
 OPTIONS:
-  -t, --text <text>       Text for the design's text objects, in order. Repeat
-                          for each one; \n breaks a line.
+  -t, --text <text>       Text for the design's next text object. Repeat for
+                          each one; \n breaks a line.
   --copies <copies>       Copies (pairs, for two-circle designs). (default: 1)
   --density <density>     Darkness 1–5 (default: the app's setting).
   --media <media>         Label media: gaps or transparent (default: the app's
@@ -309,9 +318,9 @@ OVERVIEW: Write a design as JSON, to edit and print with `sticker print FILE`.
 Sizes and positions are millimetres from the label's top-left corner; size is
 {widthMM, lengthMM}. Each object is {"content": {"text": "…"} or {"icon": "…"},
 "frame": {x, y, width, height}, "style": {…}}. "id" and "style" may be left
-out. Style: fontName, bold, italic, alignment (center, leading, trailing),
-fontSizePoints (1–72; leave out to fit the object). Shape "twoCircles" needs
-size 14x28.
+out; ids must differ if present. Style: fontName, bold, italic, alignment
+(center, leading, trailing), fontSizePoints (1–72; leave out to fit the
+object). Shape "twoCircles" needs size 14x28.
 
 USAGE: labelbridge sticker export <design> [--text <text> ...] [--out <out>]
 
@@ -319,8 +328,8 @@ ARGUMENTS:
   <design>                Template name or id, `draft`, or a .json design file.
 
 OPTIONS:
-  -t, --text <text>       Text for the design's text objects, in order. Repeat
-                          for each one; \n breaks a line.
+  -t, --text <text>       Text for the design's next text object. Repeat for
+                          each one; \n breaks a line.
   --out <out>             Output file (default: stdout).
   -h, --help              Show help information.
 
@@ -345,7 +354,7 @@ Add this to your agent's instructions (for example `CLAUDE.md`). It's also in th
 ```text
 To print labels on my NIIMBOT label printer, use the `labelbridge` command:
 - Text labels: `labelbridge print --json "First label" "Second label"` (one label per argument; \n inside a label breaks the line).
-- Stickers: run `labelbridge sticker list` to see the templates, then `labelbridge sticker print --json "TEMPLATE" --text "…" --text "…"`. Each --text fills the template's next text object; for two-circle templates each copy is one pair of circles.
+- Stickers: run `labelbridge sticker list` to see the templates and their text objects (in quotes), then `labelbridge sticker print --json "TEMPLATE" --text "…" --text "…"` with one --text per text object, in order. Text objects without a --text keep the template's text (the JSON warns). For two-circle templates each copy is one pair of circles.
 - Check first without printing: add `--dry-run`. Preview as PNG: `labelbridge preview …` or `labelbridge sticker preview … --out DIR`.
 - Run `labelbridge help sticker` for design files and more options.
 ```

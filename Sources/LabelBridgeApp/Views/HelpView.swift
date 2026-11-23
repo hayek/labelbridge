@@ -33,7 +33,7 @@ struct HelpView: View {
     static let agentInstructions = """
     To print labels on my NIIMBOT label printer, use the `labelbridge` command:
     - Text labels: `labelbridge print --json "First label" "Second label"` (one label per argument; \\n inside a label breaks the line).
-    - Stickers: run `labelbridge sticker list` to see the templates, then `labelbridge sticker print --json "TEMPLATE" --text "…" --text "…"`. Each --text fills the template's next text object; for two-circle templates each copy is one pair of circles.
+    - Stickers: run `labelbridge sticker list` to see the templates and their text objects (in quotes), then `labelbridge sticker print --json "TEMPLATE" --text "…" --text "…"` with one --text per text object, in order. Text objects without a --text keep the template's text (the JSON warns). For two-circle templates each copy is one pair of circles.
     - Check first without printing: add `--dry-run`. Preview as PNG: `labelbridge preview …` or `labelbridge sticker preview … --out DIR`.
     - Run `labelbridge help sticker` for design files and more options.
     """
@@ -86,6 +86,7 @@ struct HelpView: View {
             Text("Alignment").font(.title3.weight(.semibold)).padding(.top, 6)
             P("To check where your printer puts ink on a sticker roll, click **Print Alignment Test** under **Alignment**. For paired circles it prints a ring and a cross in the middle of each circle; a dot marks the left circle, so hold the sticker the way the designer shows it.")
             P("If the ring is off-centre, set **Move right** or **Move down** by that much (in mm; negative moves left or up) and print the test again. The offset applies to every sticker you print, from the window and from the command line. Previews don't include it.")
+            P("The printer only prints within its 12 mm band, so moving the print down or up puts ink near the band's edge out of reach. LabelBridge warns when the offset cuts off ink.")
             Text("From the command line").font(.title3.weight(.semibold)).padding(.top, 6)
             P("`labelbridge sticker` prints the built-in templates, your saved templates and the current draft. `--text` fills the design's text objects in order. See **Command Line**.")
         case .cli:
@@ -100,13 +101,14 @@ struct HelpView: View {
             labelbridge sizes
             """)
             Text("Stickers").font(.title3.weight(.semibold)).padding(.top, 6)
-            P("`labelbridge sticker` prints designs from the sticker designer: a template name, `draft` for the design open in the designer, or a `.json` design file. `--text` replaces the design's text objects in order, so one template prints any names or captions.")
+            P("`labelbridge sticker` prints designs from the sticker designer: one of your saved templates or a built-in one (by name, in any capitalisation, or by id), `draft` for the design open in the designer, or a `.json` design file. If you saved a template twice under one name, the newest is used.")
+            P("`--text` replaces the design's text objects in order, so one template prints any names or captions. Give one `--text` per text object; `sticker list` shows them in quotes. Any you leave out keep the template's own text, and the command warns.")
             Code("""
             labelbridge sticker list                         # templates and the draft
             labelbridge sticker print "Names" --text "Dana" --text "Yossi"
             labelbridge sticker print "Icons + text" --text "Oven" --text "Hall"
             labelbridge sticker print draft --copies 3 --media transparent
-            labelbridge sticker preview "Names" --text "Dana" --out /tmp/stickers
+            labelbridge sticker preview "Names" --text "Dana" --text "Yossi" --out /tmp/stickers
             labelbridge sticker export "Names" --out names.json   # edit, then:
             labelbridge sticker print names.json
             labelbridge sticker icons                        # icon names for .json files
