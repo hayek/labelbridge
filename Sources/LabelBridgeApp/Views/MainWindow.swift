@@ -27,7 +27,7 @@ struct MainWindow: View {
     var body: some View {
         Group {
             if layout == .designer {
-                StickerDesigner()
+                StickerDesigner(density: $density, media: $media)
             } else {
                 HStack(spacing: 0) {
                     editor.frame(width: 260)

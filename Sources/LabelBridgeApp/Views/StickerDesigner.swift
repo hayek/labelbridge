@@ -10,8 +10,9 @@ struct StickerDesigner: View {
     @State private var savingTemplate = false
     @State private var templateName = ""
     @State private var copies = 1
-    @State private var density = Settings.density
-    @State private var media = Settings.media
+    /// Shared with the text-batch window so both modes print with the same darkness and media.
+    @Binding var density: Int
+    @Binding var media: LabelMedia
     @State private var printing = false
     @State private var outcome: (ok: Bool, text: String)?
 

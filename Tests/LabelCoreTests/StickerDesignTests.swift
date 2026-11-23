@@ -44,7 +44,9 @@ final class StickerDesignTests: XCTestCase {
 
     func testInkOutsideThePrintBandProducesAWarning() throws {
         let design = StickerDesign(size: LabelSize(14, 28), shape: .twoCircles, objects: [
-            StickerObject(content: .icon(.home), frame: .init(x: 0, y: 0, width: 14, height: 14)),
+            // A short frame at the top edge: the icon fills its height, so ink starts above the
+            // 12 mm band (which begins about 1 mm down). SF Symbols' own padding can't hide it.
+            StickerObject(content: .icon(.home), frame: .init(x: 3, y: 0, width: 8, height: 3)),
         ])
         let result = try StickerDesignRenderer.render(design)
         XCTAssertTrue(result.warning?.contains("print band") == true, result.warning ?? "")
