@@ -5,6 +5,9 @@ public enum Cmd: UInt8, Sendable {
     case setLabelType = 0x23
     case setDensity = 0x21
     case printStart = 0x01
+    case printClear = 0x20
+    case pageStart = 0x03
+    case printQuantity = 0x15
     case printStatus = 0xA3
     case setPageSize = 0x13
     case bitmapRow = 0x85
@@ -47,6 +50,9 @@ public struct Packet: Equatable, Sendable {
         case .setLabelType: return 0x33
         case .setDensity: return 0x31
         case .printStart: return 0x02
+        case .printClear: return 0x30
+        case .pageStart: return 0x04
+        case .printQuantity: return 0x16
         case .printStatus: return 0xB3
         case .setPageSize: return 0x14
         case .pageEnd: return 0xE4

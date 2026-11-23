@@ -9,7 +9,7 @@ struct LabelBridgeCLI: ParsableCommand {
         abstract: "Print labels to a NIIMBOT Bluetooth label printer through LabelBridge.app.",
         discussion: """
         One label per argument, or one per line with --file or stdin (-). Type \\n inside a label for a line break. \
-        Any language works, including Hebrew and Arabic. Defaults (size, darkness, font, alignment) come from the app's window.
+        Any language works, including Hebrew and Arabic. Defaults (size, media, darkness, font, alignment) come from the app's window.
 
         EXAMPLES:
           labelbridge print "Dana" "Yossi" "محمد"
@@ -40,6 +40,7 @@ struct LabelOptions: ParsableArguments {
     @Option(name: .shortAndLong, help: "Read labels from a file, one per line.") var file: String?
     @Option(help: "Label size in mm, width x length, e.g. 15x50 (see `labelbridge sizes`).") var size: String?
     @Option(help: "Darkness 1–5 (default 3).") var density: Int?
+    @Option(help: "Label media: gaps or transparent (default: the app's setting).") var media: String?
     @Option(help: "Copies of each label.") var copies: Int = 1
     @Option(help: "center, leading or trailing. Leading is the start of the line: the right side for Hebrew and Arabic.") var align: String?
     @Option(help: "Font family name, e.g. \"Arial Hebrew\".") var font: String?
@@ -72,7 +73,14 @@ struct LabelOptions: ParsableArguments {
         let dens = density ?? (d?.object(forKey: "density") as? Int) ?? 3
         guard (1...5).contains(dens) else { throw ValidationError("--density must be 1–5.") }
         guard (1...99).contains(copies) else { throw ValidationError("--copies must be 1–99.") }
-        return LabelJob(items: try lines(), size: labelSize, style: style, settings: PrintSettings(density: dens, copies: copies), source: .cli)
+        let labelMedia: LabelMedia
+        if let media {
+            guard let value = LabelMedia(rawValue: media) else { throw ValidationError("--media must be gaps or transparent.") }
+            labelMedia = value
+        } else {
+            labelMedia = d?.string(forKey: "media").flatMap(LabelMedia.init(rawValue:)) ?? .gaps
+        }
+        return LabelJob(items: try lines(), size: labelSize, style: style, settings: PrintSettings(density: dens, copies: copies, media: labelMedia), source: .cli)
     }
 }
 

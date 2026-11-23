@@ -8,7 +8,7 @@ public struct EncodedPage: Equatable, Sendable {
 /// Rotates a label bitmap 90° clockwise into printer rows ("left" print direction)
 /// and compresses identical consecutive rows.
 public enum RowEncoder {
-    public static func encode(_ bitmap: Bitmap) -> EncodedPage {
+    public static func encode(_ bitmap: Bitmap, profile: PrinterProfile = .d11H) -> EncodedPage {
         let rows = bitmap.width
         let cols = (bitmap.height + 7) / 8 * 8
         var packets: [Packet] = []
@@ -20,8 +20,14 @@ public enum RowEncoder {
                 packets.append(Packet(.emptyRow, Packet.u16(run.pos) + [UInt8(run.repeats)]))
             } else {
                 let count = run.bytes.reduce(0) { $0 + $1.nonzeroBitCount }
-                // pixel count in "total" mode: [0, lo, hi]
-                let header = Packet.u16(run.pos) + [0, UInt8(count & 0xFF), UInt8((count >> 8) & 0xFF), UInt8(run.repeats)]
+                var counts: [UInt8] = [0, UInt8(count & 0xFF), UInt8((count >> 8) & 0xFF)]
+                if profile == .d110 {
+                    // The 96-dot head reports a separate count for each 32-dot section.
+                    counts = (0..<3).map { part in
+                        UInt8(run.bytes.dropFirst(part * 4).prefix(4).reduce(0) { $0 + $1.nonzeroBitCount })
+                    }
+                }
+                let header = Packet.u16(run.pos) + counts + [UInt8(run.repeats)]
                 packets.append(Packet(.bitmapRow, header + run.bytes))
             }
             current = nil

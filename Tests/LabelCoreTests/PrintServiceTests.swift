@@ -53,6 +53,61 @@ final class PrintServiceTests: XCTestCase {
         XCTAssertEqual(r.failure, .notFound)
         XCTAssertEqual(r.printed, 0)
     }
+
+    func testD110UsesLegacyCommandsAndNativePageSizeForTextAndBitmaps() async {
+        for textJob in [true, false] {
+            let printer = SimulatedPrinter()
+            printer.profile = .d110
+            let queue = JobQueue(makeLink: { printer }, makeSession: fastSession)
+            let settings = PrintSettings(density: 5, copies: 2)
+            let result: JobResult
+            if textJob {
+                var text = job(["One", "Two"])
+                text.settings = settings
+                result = await queue.submit(text) { _, _ in }
+            } else {
+                let bitmap = Bitmap(width: 591, height: 142, pixels: [Bool](repeating: true, count: 591 * 142))
+                result = await queue.submit(bitmaps: [bitmap, bitmap], settings: settings) { _, _ in }
+            }
+            XCTAssertTrue(result.ok, result.error ?? "")
+            XCTAssertEqual(result.printed, 4)
+            let commands = printer.commands.filter { $0 != 0x85 && $0 != 0x84 && $0 != 0xA3 }
+            XCTAssertEqual(commands, [0xC1, 0x21, 0x23, 0x01,
+                                      0x20, 0x03, 0x13, 0x15, 0xE3,
+                                      0x20, 0x03, 0x13, 0x15, 0xE3, 0xF3])
+            XCTAssertEqual(printer.sent.first { $0.cmd == 0x01 }?.data, [1])
+            XCTAssertEqual(printer.sent.first { $0.cmd == 0x13 }?.data, [1, 144, 0, 96])
+            XCTAssertEqual(printer.sent.first { $0.cmd == 0x15 }?.data, [0, 2])
+            XCTAssertEqual(printer.sent.first { $0.cmd == 0x21 }?.data, [3])
+        }
+    }
+
+    func testD110WaitsForPageBeforeClearingNextPage() async {
+        let printer = SimulatedPrinter()
+        printer.profile = .d110
+        printer.labelDuration = .milliseconds(50)
+        let counters = CommandLog()
+        printer.onSend = { packet in
+            if packet.cmd == Cmd.printClear.rawValue { counters.append(UInt8(printer.counter)) }
+        }
+        let queue = JobQueue(makeLink: { printer }, makeSession: fastSession)
+        let result = await queue.submit(job(["One", "Two"])) { _, _ in }
+        XCTAssertTrue(result.ok, result.error ?? "")
+        XCTAssertEqual(counters.all, [0, 1])
+    }
+
+    func testTransparent14x28LabelUsesNativeD110DimensionsAndMedia() async {
+        let printer = SimulatedPrinter()
+        printer.profile = .d110
+        let queue = JobQueue(makeLink: { printer }, makeSession: fastSession)
+        var transparent = job(["Clear label"])
+        transparent.size = LabelSize(14, 28)
+        transparent.settings.media = .transparent
+        let result = await queue.submit(transparent) { _, _ in }
+        XCTAssertTrue(result.ok, result.error ?? "")
+        XCTAssertEqual(printer.sent.first { $0.cmd == 0x13 }?.data, [0, 224, 0, 96])
+        XCTAssertEqual(printer.sent.first { $0.cmd == 0x23 }?.data, [5])
+    }
 }
 
 final class CommandLog: @unchecked Sendable {

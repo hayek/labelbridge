@@ -3,6 +3,7 @@
 /// A fake D11 that answers like the real printer: each command's reply, and a page counter
 /// (advanced by `copies` on every pageEnd) reported by printStatus.
 final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
+    var profile: PrinterProfile = .d11H
     private(set) var sent: [Packet] = []
     private var parser = FrameParser()
     private var continuation: AsyncStream<Packet>.Continuation!
@@ -57,12 +58,22 @@ final class SimulatedPrinter: PrinterLink, @unchecked Sendable {
             switch p.cmd {
             case Cmd.connect.rawValue: if answerConnect { reply(0xC2, [3]) }
             case Cmd.setPageSize.rawValue:
-                copies = Int(p.data[4]) << 8 | Int(p.data[5])
+                if profile == .d110 {
+                    guard p.data.count == 4, Array(p.data[2..<4]) == [0, 96] else {
+                        reply(0xDB, [6])
+                        continue
+                    }
+                } else {
+                    copies = Int(p.data[4]) << 8 | Int(p.data[5])
+                }
                 if let d = pageSizeReplyDelay {
                     Task { try? await Task.sleep(for: d); self.reply(0x14, [1, 0]) }
                 } else {
                     reply(0x14, [1, 0])
                 }
+            case Cmd.printQuantity.rawValue:
+                copies = Int(p.data[0]) << 8 | Int(p.data[1])
+                reply(0x16, [1])
             case Cmd.pageEnd.rawValue:
                 pageEnds += 1
                 if let d = labelDuration {

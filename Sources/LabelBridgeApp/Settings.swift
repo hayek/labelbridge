@@ -1,6 +1,12 @@
 import Foundation
 import LabelCore
 
+enum LabelLayout: String, CaseIterable {
+    case text, designer
+
+    var title: String { self == .text ? "Text batch" : "Sticker designer" }
+}
+
 /// User defaults shared by the window, the CLI service and the Print-dialog listener.
 enum Settings {
     private static let d = UserDefaults.standard
@@ -11,6 +17,14 @@ enum Settings {
     static var density: Int {
         get { d.object(forKey: "density") as? Int ?? 3 }
         set { d.set(newValue, forKey: "density") }
+    }
+    static var media: LabelMedia {
+        get { d.string(forKey: "media").flatMap(LabelMedia.init(rawValue:)) ?? .gaps }
+        set { d.set(newValue.rawValue, forKey: "media") }
+    }
+    static var layout: LabelLayout {
+        get { d.string(forKey: "layout").flatMap(LabelLayout.init(rawValue:)) ?? .text }
+        set { d.set(newValue.rawValue, forKey: "layout") }
     }
     static var fontName: String? {
         get { d.string(forKey: "fontName") }

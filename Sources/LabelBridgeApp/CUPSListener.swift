@@ -42,7 +42,7 @@ enum CUPSListener {
         do {
             let bitmaps = try PDFLabels.bitmaps(from: data, size: size)
             Log.write("CUPS job: \(bitmaps.count) page(s)")
-            let r = await PrintService.shared.print(bitmaps: bitmaps, settings: PrintSettings(density: Settings.density, copies: 1))
+            let r = await PrintService.shared.print(bitmaps: bitmaps, settings: PrintSettings(density: Settings.density, copies: 1, media: Settings.media))
             if !r.ok {
                 let done = r.printed > 0 ? " \(r.printed) of \(r.total) labels printed." : ""
                 Notifier.post(title: "Couldn't print to the NIIMBOT D11", body: (r.error ?? "Printing failed.") + done)

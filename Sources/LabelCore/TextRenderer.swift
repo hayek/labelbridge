@@ -3,15 +3,45 @@ import AppKit
 public enum Alignment: String, Codable, Sendable, CaseIterable { case center, leading, trailing }
 
 public struct TextStyle: Codable, Hashable, Sendable {
+    public static let fontSizeRange = 1.0...72.0
     public var fontName: String?
     public var bold: Bool
     public var alignment: Alignment
+    public var italic: Bool
+    /// Physical points (1/72 inch); nil keeps the existing automatic fit-to-object behavior.
+    public var fontSizePoints: Double?
 
-    public init(fontName: String? = nil, bold: Bool = false, alignment: Alignment = .center) {
+    public init(fontName: String? = nil, bold: Bool = false, alignment: Alignment = .center,
+                italic: Bool = false, fontSizePoints: Double? = nil) {
         self.fontName = fontName
         self.bold = bold
         self.alignment = alignment
+        self.italic = italic
+        self.fontSizePoints = fontSizePoints
     }
+
+    private enum CodingKeys: String, CodingKey { case fontName, bold, alignment, italic, fontSizePoints }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        fontName = try values.decodeIfPresent(String.self, forKey: .fontName)
+        bold = try values.decode(Bool.self, forKey: .bold)
+        alignment = try values.decode(Alignment.self, forKey: .alignment)
+        italic = try values.decodeIfPresent(Bool.self, forKey: .italic) ?? false
+        fontSizePoints = try values.decodeIfPresent(Double.self, forKey: .fontSizePoints)
+        try validate()
+    }
+
+    func validate() throws {
+        if let points = fontSizePoints, !points.isFinite || !Self.fontSizeRange.contains(points) {
+            throw TextStyleError.invalidFontSize
+        }
+    }
+}
+
+enum TextStyleError: LocalizedError {
+    case invalidFontSize
+    var errorDescription: String? { "Font size must be between 1 and 72 pt." }
 }
 
 public struct RenderResult: Sendable {
@@ -29,23 +59,7 @@ public enum TextRenderer {
         let margin = LabelSize.endMarginPixels
         let availableWidth = CGFloat(length - 2 * margin)
         let usableHeight = CGFloat(height) - 2 * verticalPadding
-        let lines = text.components(separatedBy: "\n")
-
-        // Largest font size whose lines fit the width and whose actual ink fits the print band.
-        // Ink is measured from a rendering, so fallback fonts (Arabic, CJK, emoji) are accounted for.
-        func widthFits(_ font: NSFont) -> Bool { lines.allSatisfy { measure($0, font: font) <= availableWidth } }
-        func fits(_ px: CGFloat) -> Bool {
-            let font = makeFont(style, px)
-            guard widthFits(font) else { return false }
-            return drawBlock(lines, font: font, style: style, width: Int(availableWidth), keepPixels: false).inkHeight <= Int(usableHeight)
-        }
-        var lo = minFontPixels, hi = CGFloat(height)
-        if fits(lo) {
-            while hi - lo > 0.5 { let mid = (lo + hi) / 2; if fits(mid) { lo = mid } else { hi = mid } }
-        }
-        let font = makeFont(style, lo)
-        let truncated = !widthFits(font)
-        let block = drawBlock(lines, font: font, style: style, width: Int(availableWidth))
+        let (block, truncated) = fittedBlock(text, style: style, width: Int(availableWidth), height: Int(usableHeight))
 
         // Copy the inked rows into the label, centred vertically, between the end margins.
         var pixels = [Bool](repeating: false, count: length * height)
@@ -57,6 +71,27 @@ public enum TextRenderer {
         }
         let warning = truncated ? "Text too long for a \(size) mm label; shortened with \"…\": \(text.prefix(40))" : nil
         return RenderResult(bitmap: Bitmap(width: length, height: height, pixels: pixels), warning: warning)
+    }
+
+    /// Fits actual ink rather than font metrics, including fallback fonts and right-to-left shaping.
+    static func fittedBlock(_ text: String, style: TextStyle, width: Int, height: Int) -> (Block, Bool) {
+        let lines = text.components(separatedBy: "\n")
+        func widthFits(_ font: NSFont) -> Bool { lines.allSatisfy { measure($0, font: font) <= CGFloat(width) } }
+        if let points = style.fontSizePoints {
+            let font = makeFont(style, CGFloat(points * LabelSize.dpi / 72))
+            return (drawBlock(lines, font: font, style: style, width: width), !widthFits(font))
+        }
+        func fits(_ px: CGFloat) -> Bool {
+            let font = makeFont(style, px)
+            guard widthFits(font) else { return false }
+            return drawBlock(lines, font: font, style: style, width: width, keepPixels: false).inkHeight <= height
+        }
+        var lo = minFontPixels, hi = CGFloat(height) + 2 * verticalPadding
+        if fits(lo) {
+            while hi - lo > 0.5 { let mid = (lo + hi) / 2; if fits(mid) { lo = mid } else { hi = mid } }
+        }
+        let font = makeFont(style, lo)
+        return (drawBlock(lines, font: font, style: style, width: width), !widthFits(font))
     }
 
     struct Block {
@@ -118,10 +153,16 @@ public enum TextRenderer {
     }
 
     static func makeFont(_ style: TextStyle, _ px: CGFloat) -> NSFont {
-        if let name = style.fontName, let f = NSFont(name: name, size: px) {
-            return style.bold ? NSFontManager.shared.convert(f, toHaveTrait: .boldFontMask) : f
+        let chosen = style.fontName.flatMap {
+            NSFont(name: $0, size: px) ?? NSFontManager.shared.font(withFamily: $0, traits: [], weight: 5, size: px)
         }
-        return style.bold ? .boldSystemFont(ofSize: px) : .systemFont(ofSize: px)
+        let font: NSFont
+        if let chosen {
+            font = style.bold ? NSFontManager.shared.convert(chosen, toHaveTrait: .boldFontMask) : chosen
+        } else {
+            font = style.bold ? .boldSystemFont(ofSize: px) : .systemFont(ofSize: px)
+        }
+        return style.italic ? NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask) : font
     }
 
     static func measure(_ line: String, font: NSFont) -> CGFloat {
